@@ -1,0 +1,11 @@
+# clippy.toml — Phase 0
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+# Forbid direct crossterm dependency at the source level (PITFALLS.md double-version hazard).
+# All terminal styling goes through owo-colors (Phase 0) or ratatui::crossterm (Phase 1+).
+disallowed-types = [
+    { path = "crossterm::event::Event", reason = "use owo-colors (Phase 0) or ratatui::crossterm (Phase 1+) — see PITFALLS.md double-version hazard" },
+    { path = "crossterm::style::Color", reason = "use owo-colors (Phase 0) or ratatui::crossterm (Phase 1+) — see PITFALLS.md double-version hazard" },
+]
