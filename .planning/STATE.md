@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 0 context gathered
-last_updated: "2026-05-22T11:35:17.181Z"
-last_activity: 2026-05-22 -- Phase 00 planning complete
+stopped_at: Completed 00-spike-spine 00-01-PLAN.md (scaffold + CI)
+last_updated: "2026-05-22T11:44:32.958Z"
+last_activity: 2026-05-22
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 0 — Spike & Spine
+**Current focus:** Phase 00 — spike-spine
 
 ## Current Position
 
-Phase: 0 of 4 (Spike & Spine) — numbering starts at 0 because the Gemini spike is gating
-Plan: 0 of TBD in current phase
+Phase: 00 (spike-spine) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-05-22 -- Phase 00 planning complete
+Last activity: 2026-05-22
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: — (no data yet)
 
 *Updated after each plan completion*
+| Phase 00-spike-spine P01 | 3m | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Init]: Phase 0 numbering preserved (not collapsed into Phase 1) because the Gemini go/no-go memo is gating — Phase 3 scope depends on its outcome.
 - [Init]: ADP-05 (Gemini) is conditional — success criteria phrased to honor either spike outcome (ship full / stub with opt-in flag).
 - [Init]: Foundational items (keyring-core + Secret<T> + ratatui panic hook + per-adapter Vec<Result> isolation) wired in Phase 1 BEFORE feature code, per research recommendation.
+- [Phase ?]: Phase 0 dep minimalism: Cargo.toml pins exactly 9 production deps + 1 dev dep; tokio uses lean features [rt, macros] only — rationale comment in manifest documents Phase 1 upgrade path.
+- [Phase ?]: Clippy disallowed-types uses concrete crossterm paths (event::Event, style::Color) — Clippy's lint does not accept glob patterns; explicit list grows in Plans 02/03 as needed.
+- [Phase ?]: CI uses actions-rust-lang/setup-rust-toolchain@v1 (bundles rust-cache + problem matchers; documented successor to dtolnay/rust-toolchain) on 3-OS matrix with fail-fast=false.
 
 ### Pending Todos
 
@@ -91,6 +95,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-22T08:03:20.448Z
-Stopped at: Phase 0 context gathered
-Resume file: .planning/phases/00-spike-spine/00-CONTEXT.md
+Last session: 2026-05-22T11:44:32.937Z
+Stopped at: Completed 00-spike-spine 00-01-PLAN.md (scaffold + CI)
+Resume file: None

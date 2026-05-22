@@ -40,7 +40,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Provider Adapters
 
-- [ ] **ADP-00**: `Provider` trait + `FetchCtx` + `ProviderState` / `ResetInfo` / `HpUnit` / `ProviderError` 統一介面，三家共用
+- [x] **ADP-00**: `Provider` trait + `FetchCtx` + `ProviderState` / `ResetInfo` / `HpUnit` / `ProviderError` 統一介面，三家共用
 - [ ] **ADP-01**: Adapter 失敗只影響該 provider — 不會讓整個 AHB crash 或 blank（per-adapter timeout + `Vec<Result<...>>` + cache stale fallback）
 - [ ] **ADP-02**: Claude Code adapter — 從 `~/.claude/projects/**/*.jsonl` 計算 5h rolling window 用量 + reset 時間（不依賴 stats-cache.json 為 source of truth）
 - [ ] **ADP-03**: Claude adapter schema drift sentinel — 當期望欄位大量缺失時顯示「adapter may be out-of-date」警告
@@ -118,7 +118,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-02 | Phase 1 | Pending |
 | SEC-03 | Phase 2 | Pending |
 | SEC-04 | Phase 1 | Pending |
-| ADP-00 | Phase 0 | Pending |
+| ADP-00 | Phase 0 | Complete |
 | ADP-01 | Phase 1 | Pending |
 | ADP-02 | Phase 1 | Pending |
 | ADP-03 | Phase 1 | Pending |

@@ -35,11 +35,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Charset decision is recorded (ASCII default vs. emoji opt-in) and verified to render correctly in tmux, screen, and Windows Terminal.
   5. Repo is scaffolded with MSRV pin (≥1.88), clippy config (`unwrap_used = deny` for adapter/render paths), and a CI skeleton that runs `cargo build` + `cargo test` + `cargo clippy`.
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 00-01-PLAN.md — Repo scaffold + Cargo.toml + LICENSE × 2 + clippy.toml + 3-OS CI workflow (placeholder binary; no domain code) [wave 1]
+- [x] 00-01-PLAN.md — Repo scaffold + Cargo.toml + LICENSE × 2 + clippy.toml + 3-OS CI workflow (placeholder binary; no domain code) [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -123,7 +123,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Spike & Spine | 0/5 | Not started | - |
+| 0. Spike & Spine | 1/5 | In Progress|  |
 | 1. Engine + Claude + TUI Scaffold | 0/TBD | Not started | - |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
