@@ -1,10 +1,11 @@
 ---
 phase: 1
 slug: engine-claude-tui-scaffold
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-22
+reviewed_at: 2026-05-22
 ---
 
 # Phase 1 — UI Design Contract
