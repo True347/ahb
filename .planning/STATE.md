@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 00-spike-spine 00-03-PLAN.md (runtime spine wiring)
-last_updated: "2026-05-22T13:31:01Z"
-last_activity: 2026-05-22
+status: completed
+stopped_at: Completed 00-spike-spine 00-03-PLAN.md (runtime spine wiring; cargo run prints the D-25 bar via the locked trait)
+last_updated: "2026-05-22T14:28:39.655Z"
+last_activity: 2026-05-22 -- Phase 00 marked complete
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 0
+  completed_plans: 5
+  percent: 20
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 
 ## Current Position
 
-Phase: 00 (spike-spine) — EXECUTING
+Phase: 00 — COMPLETE
 Plan: 4 of 5 (Wave 3 done; only Plan 05 smoke + charset verification remains)
-Status: Ready to execute
-Last activity: 2026-05-22
+Status: Phase 00 complete
+Last activity: 2026-05-22 -- Phase 00 marked complete
 
 Progress: [██████░░░░] 60%
 
