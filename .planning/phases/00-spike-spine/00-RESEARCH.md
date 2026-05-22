@@ -836,22 +836,24 @@ Phase 0 cleanly decomposes into **three parallel-ish workstreams** plus a small 
 | A8 | `cargo run` on first invocation will not be rate-limited or blocked by the user's terminal emulator's font lacking U+2588 | Pitfall 4 / charset verification | LOW — every modern monospaced font ships block elements. If absent, the user falls back to `--ascii` (D-18) which is explicitly designed for this. |
 | A9 | The `gemini -p "/stats"` path is currently broken (per PR #8305 limitation) but Attempt 3 (`--output-format json`) is plausible. | Pitfall 1 + Plan 04 | MEDIUM. This is the largest unknown. The spike is *designed* to resolve it; if all three attempts fail, that's a clean no-go decision per D-22. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does `gemini -p "/stats"` work in the current installed version of gemini-cli on the developer's box, or does PR #8305's "built-in commands not supported" limitation block it?**
+All three open questions below are RESOLVED for plan-phase purposes — either by deferring the empirical answer to Plan 04 (the spike whose explicit job IS to answer them), or by an immediate design call documented inline. None of them block planning.
+
+1. **Does `gemini -p "/stats"` work in the current installed version of gemini-cli on the developer's box, or does PR #8305's "built-in commands not supported" limitation block it?** — **RESOLVED: empirical answer produced by Plan 04 execution.**
    - What we know: PR #8305 merged 2025-09-19; states custom commands work non-interactively but built-in commands do not.
    - What's unclear: whether `/stats` has been backfilled in a later release; whether `--output-format json` populates a `stats` block on any trivial prompt.
-   - Recommendation: the spike (Plan 04) IS the resolution. Don't try to answer from docs.
+   - Resolution: Plan 04 IS the resolution. The spike runs the three attempts on the real installed gemini-cli, records empirical results in `GEMINI_SPIKE.md`, and emits the go/no-go decision per D-21. No prior answer from docs is possible or required for planning to proceed.
 
-2. **Does the gemini-cli `stats` object include a reset-window boundary or only per-call cumulative tokens?**
+2. **Does the gemini-cli `stats` object include a reset-window boundary or only per-call cumulative tokens?** — **RESOLVED: empirical answer produced by Plan 04 execution.**
    - What we know: PR #15021 (raw input token counts) + headless.md (response/stats/error structure) confirm token counts exist; cached-token discrimination exists; per-model breakdowns exist.
    - What's unclear: whether any field encodes the "5-hour rolling session" or "weekly cap" that the AHB UX needs. If only cumulative tokens are exposed, the adapter must compute rolling-window math from local session-log timestamps + a known per-tier limit table — a heavier lift.
-   - Recommendation: the spike captures three sample outputs (per Plan 04), spec'd in `GEMINI_SPIKE.md`. Phase 3 adapter design depends on this answer.
+   - Resolution: Plan 04 captures three sample outputs (per Plan 04 acceptance criteria) and the "Parse feasibility" section in `GEMINI_SPIKE.md` records whether reset-window info is present. Phase 3 adapter design depends on this answer; Phase 0 does NOT — it merely lock the contract types that can hold both shapes (`HpWindow.label` accommodates "5h session" / "weekly" / "cumulative" alike per D-09).
 
-3. **Should Phase 0 binary's mock output ever exercise the `bar_color` field?**
+3. **Should Phase 0 binary's mock output ever exercise the `bar_color` field?** — **RESOLVED: NO — declare-but-don't-render in Phase 0.**
    - What we know: CONTEXT D-09 declares the field; D-25 sets `bar_color = None` for the mock.
    - What's unclear: whether Plan 03's renderer should *match* on `bar_color` and skip the `None` arm, or whether the field is wholly unused in Phase 0.
-   - Recommendation: declare the field, set it to `None` in the mock, *don't* wire renderer logic for it yet. Phase 1/2 UI plans (where `bar_color` actually means something) own that.
+   - Resolution: The field is declared in `HpWindow` (per D-09) and set to `None` in the mock (per D-25). The Phase 0 renderer (`src/cli/render_text.rs`) ignores `bar_color` entirely — no `match` arm, no colour styling, no read access. Phase 1/2 UI plans (where `bar_color` becomes meaningful) own the renderer logic. This is the minimum-risk path: lock the field shape now (so v1 adapters compile against the final API) without committing to v1-frozen colour rules.
 
 ## Environment Availability
 
