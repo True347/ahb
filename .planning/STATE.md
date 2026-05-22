@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 00-spike-spine 00-01-PLAN.md (scaffold + CI)
-last_updated: "2026-05-22T11:44:32.958Z"
+stopped_at: Completed 00-spike-spine 00-02-PLAN.md (contract spine)
+last_updated: "2026-05-22T12:08:45.945Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 00 (spike-spine) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-05-22
 
-Progress: [██░░░░░░░░] 20%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [██░░░░░░░░] 20%
 
 *Updated after each plan completion*
 | Phase 00-spike-spine P01 | 3m | 3 tasks | 9 files |
+| Phase 00-spike-spine P02 | 5m | - tasks | - files |
 
 ## Accumulated Context
 
@@ -72,6 +73,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Phase 0 dep minimalism: Cargo.toml pins exactly 9 production deps + 1 dev dep; tokio uses lean features [rt, macros] only — rationale comment in manifest documents Phase 1 upgrade path.
 - [Phase ?]: Clippy disallowed-types uses concrete crossterm paths (event::Event, style::Color) — Clippy's lint does not accept glob patterns; explicit list grows in Plans 02/03 as needed.
 - [Phase ?]: CI uses actions-rust-lang/setup-rust-toolchain@v1 (bundles rust-cache + problem matchers; documented successor to dtolnay/rust-toolchain) on 3-OS matrix with fail-fast=false.
+- [Phase ?]: [Phase 0-02]: ProviderError serde shape — newtype variants Network(NetworkErr) and Internal(anyhow::Error) converted to single-field struct variants (Network { source }, Internal { source }) to satisfy serde internally-tagged enum constraints. From impls preserve construction ergonomics; #[serde(serialize_with = serialize_display)] still emits Display-only JSON (W-7 binding).
+- [Phase ?]: [Phase 0-02]: ProviderState.source uses Cow<'static, str> (W-2) so serde round-trip yields Cow::Owned without lifetime errors; adapter ergonomics preserved via Cow::Borrowed for static labels.
+- [Phase ?]: [Phase 0-02]: Phase 0 lint floor relocated to src/lib.rs (crate root) so all modules inherit deny(unwrap/expect/panic) + warn(pedantic) automatically.
+- [Phase ?]: [Phase 0-02]: FetchCtx<'a> locked at minimal 2 fields (now, &Secrets); derives Copy because jiff::Timestamp is Copy. Additive fields deferred to Phase 1.
 
 ### Pending Todos
 
@@ -95,6 +100,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-22T11:44:32.937Z
-Stopped at: Completed 00-spike-spine 00-01-PLAN.md (scaffold + CI)
+Last session: 2026-05-22T12:08:45.931Z
+Stopped at: Completed 00-spike-spine 00-02-PLAN.md (contract spine)
 Resume file: None
