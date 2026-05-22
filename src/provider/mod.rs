@@ -16,6 +16,8 @@ use async_trait::async_trait;
 use crate::model::{ProviderError, ProviderId, ProviderState};
 use crate::secrets::Secrets;
 
+pub mod mock;
+
 /// Per-fetch context. Currently the minimal 2 fields recommended by RESEARCH Q5:
 /// the wall clock and a shared-reference to the secrets handle. Adapters MUST use
 /// `ctx.now` instead of `jiff::Timestamp::now()` so tests can inject a frozen clock
