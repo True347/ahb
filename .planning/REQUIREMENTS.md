@@ -99,18 +99,48 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 ~ CORE-06 | TBD | Pending |
-| TUI-01 ~ TUI-05 | TBD | Pending |
-| CFG-01 ~ CFG-04 | TBD | Pending |
-| SEC-01 ~ SEC-04 | TBD | Pending |
-| ADP-00 ~ ADP-05 | TBD | Pending |
-| DIST-01 ~ DIST-04 | TBD | Pending |
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 2 | Pending |
+| CORE-03 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Pending |
+| CORE-05 | Phase 1 | Pending |
+| CORE-06 | Phase 2 | Pending |
+| TUI-01 | Phase 1 | Pending |
+| TUI-02 | Phase 1 | Pending |
+| TUI-03 | Phase 3 | Pending |
+| TUI-04 | Phase 1 | Pending |
+| TUI-05 | Phase 1 | Pending |
+| CFG-01 | Phase 1 | Pending |
+| CFG-02 | Phase 1 | Pending |
+| CFG-03 | Phase 3 | Pending |
+| CFG-04 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 2 | Pending |
+| SEC-04 | Phase 1 | Pending |
+| ADP-00 | Phase 0 | Pending |
+| ADP-01 | Phase 1 | Pending |
+| ADP-02 | Phase 1 | Pending |
+| ADP-03 | Phase 1 | Pending |
+| ADP-04 | Phase 2 | Pending |
+| ADP-05 | Phase 3 | Pending (conditional on Phase 0 spike) |
+| DIST-01 | Phase 4 | Pending |
+| DIST-02 | Phase 4 | Pending |
+| DIST-03 | Phase 4 | Pending |
+| DIST-04 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 0 (filled by roadmapper)
-- Unmapped: 28 (will resolve in Step 8)
+- v1 requirements: 29 total (CORE×6 + TUI×5 + CFG×4 + SEC×4 + ADP×6 + DIST×4)
+- Mapped to phases: 29 ✓
+- Unmapped: 0
+
+**Phase distribution:**
+- Phase 0 (Spike & Spine): 1 requirement (ADP-00)
+- Phase 1 (Engine + Claude + TUI): 15 requirements (CORE-01, CORE-05, TUI-01/02/04/05, CFG-01/02/04, SEC-01/02/04, ADP-01/02/03)
+- Phase 2 (Codex + Output): 6 requirements (CORE-02/03/04/06, SEC-03, ADP-04)
+- Phase 3 (Gemini + Cache): 3 requirements (TUI-03, CFG-03, ADP-05)
+- Phase 4 (Distribution): 4 requirements (DIST-01/02/03/04)
 
 ---
 *Requirements defined: 2026-05-22*
-*Last updated: 2026-05-22 after initial definition*
+*Last updated: 2026-05-22 after roadmap creation — traceability filled, total corrected from 28 to 29 (ADP has 6 items: ADP-00 through ADP-05)*
