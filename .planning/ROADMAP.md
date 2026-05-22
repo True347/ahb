@@ -13,7 +13,7 @@ AHB ships in five phases that each deliver an end-to-end, user-runnable binary. 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 0: Spike & Spine** — Gemini go/no-go memo + `model.rs` contract + scaffold + skeleton binary
+- [x] **Phase 0: Spike & Spine** — Gemini go/no-go memo + `model.rs` contract + scaffold + skeleton binary (completed 2026-05-22)
 - [ ] **Phase 1: Engine + Claude + TUI Scaffold** — load-bearing phase: engine, Claude adapter, TUI shell, keyring, panic hook, error isolation
 - [ ] **Phase 2: Codex + Output Formats** — Codex adapter via spawn_blocking + SQLite, lock `--detailed` / `--json schema_version:1` + exit codes
 - [ ] **Phase 3: Gemini (conditional) + Cache & Refresh Policy** — Gemini adapter (full or stub per Phase 0), per-provider refresh, moka stale-on-error
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Charset decision is recorded (ASCII default vs. emoji opt-in) and verified to render correctly in tmux, screen, and Windows Terminal.
   5. Repo is scaffolded with MSRV pin (≥1.88), clippy config (`unwrap_used = deny` for adapter/render paths), and a CI skeleton that runs `cargo build` + `cargo test` + `cargo clippy`.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 
@@ -52,7 +52,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 00-05-PLAN.md — Phase 0 smoke + charset verification (xxd byte proof + visual eyeball) + Phase 0 success-criteria checklist [wave 4]
+- [x] 00-05-PLAN.md — Phase 0 smoke + charset verification (xxd byte proof + visual eyeball) + Phase 0 success-criteria checklist [wave 4]
 
 ### Phase 1: Engine + Claude + TUI Scaffold
 
@@ -123,7 +123,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Spike & Spine | 4/5 | In Progress|  |
+| 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
 | 1. Engine + Claude + TUI Scaffold | 0/TBD | Not started | - |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |

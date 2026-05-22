@@ -162,25 +162,69 @@ Gemini deferred to v2 per D-22. Phase 3 ships an opt-in stub:
 
 ## Charset verification (per D-26)
 
-**Placeholder section — Plan 05 fills the actual byte-level + visual proof.** Plan 04 created Section 7 ahead of the `ahb` binary being available (Plan 03 builds it; Plan 04 ran in Wave 2 in parallel with Plan 02). Plan 05's smoke test will:
+Performed on dev box terminal: **kitty** (`TERM=xterm-256color`, Linux Arch x86_64, Phase 0 binary built via `cargo build --release` at `/home/chasel/REPO/AIHPBar/target/release/ahb`).
+Date: 2026-05-22
 
-1. Build the release binary: `cargo build --release`
-2. Capture byte-level output: `./target/release/ahb > /tmp/ahb-out.txt && xxd /tmp/ahb-out.txt | head -3`
-3. Assert expected bytes: U+2588 (`e2 96 88`) ×6, U+2591 (`e2 96 91`) ×4, U+2022 (`e2 80 a2`) ×1 (per D-15 + D-25 — `mock-session  ██████░░░░ 60% • resets in <2h00m>`)
-4. Visual eyeball in this terminal (Alacritty / xterm-256color) — verify 10 cells render single-column, no tofu, no replacement char (Pitfall 4 criteria a-e)
-5. tmux: not installed on this dev box (verified `tmux -V` → "not found"). Skipped per Pitfall 4 best-effort. Plan 05 records this as a known-skipped row.
-6. screen: not installed on this dev box. Skipped per Pitfall 4 best-effort.
-7. Windows Terminal: not installed on this dev box (Linux Arch). Deferred to first Windows install; CI matrix (`.github/workflows/ci.yml` runs `windows-latest`) provides byte-level proof via Plan 05's `cargo test` snapshot.
+### Byte-level proof (binding control per Pitfall 4)
 
-**Definition of "renders correctly"** (Pitfall 4 lines 408-413, repeated here so Plan 05 can grep this section):
-(a) U+2588 = single column-wide solid block; (b) U+2591 = single column-wide light shade; (c) U+2022 does not consume two columns; (d) no U+FFFD replacement char; (e) no "tofu" rectangle.
+Unicode default mode:
 
-**Expected eyeball form** (what Plan 05 must see):
 ```
-mock-session  ██████░░░░ 60% • resets in 2h00m
+$ /home/chasel/REPO/AIHPBar/target/release/ahb > /tmp/ahb-out.txt
+$ xxd /tmp/ahb-out.txt
+00000000: 6d6f 636b 2d73 6573 7369 6f6e 2020 e296  mock-session  ..
+00000010: 88e2 9688 e296 88e2 9688 e296 88e2 9688  ................
+00000020: e296 91e2 9691 e296 91e2 9691 2036 3025  ............ 60%
+00000030: 20e2 80a2 2072 6573 6574 7320 696e 2032   ... resets in 2
+00000040: 6830 306d 0a                             h00m.
 ```
 
-Plan 05 amends this section with: actual `xxd` output, actual terminal screenshot description, PASS/FAIL per criterion.
+Bytes present (counted by streaming the full hex through `awk gsub`):
+- U+2588 (`e2 96 88`) ×**6** ✓ (offsets 0x0e–0x1f, 18 contiguous bytes = 6 codepoints)
+- U+2591 (`e2 96 91`) ×**4** ✓ (offsets 0x20–0x2b, 12 contiguous bytes = 4 codepoints)
+- U+2022 (`e2 80 a2`) ×**1** ✓ (offsets 0x31–0x33)
+
+Total stdout length: 69 bytes including trailing `0x0a` newline.
+
+ASCII fallback mode:
+
+```
+$ /home/chasel/REPO/AIHPBar/target/release/ahb --ascii > /tmp/ahb-ascii.txt
+$ xxd /tmp/ahb-ascii.txt
+00000000: 6d6f 636b 2d73 6573 7369 6f6e 2020 2323  mock-session  ##
+00000010: 2323 2323 2d2d 2d2d 2036 3025 207c 2072  ####---- 60% | r
+00000020: 6573 6574 7320 696e 2032 6830 306d 0a    esets in 2h00m.
+```
+
+Bytes confirmed: `0x23` (`#`) ×**6** in the bar fill, `0x2d` (`-`) ×**4** in the bar empty + ×**1** in the `mock-session` label = 5 total, `0x7c` (`|`) ×**1** as the separator — all pure ASCII (no codepoint above 0x7F anywhere in the line).
+
+### Regex assertions (binding shape per Plan 03 W-3)
+
+```
+$ /home/chasel/REPO/AIHPBar/target/release/ahb | grep -qP '^mock-session  ██████░░░░ 60% • resets in [0-9]+h[0-9]{2}m$'
+$ echo $?  # → 0 (MATCH)
+
+$ /home/chasel/REPO/AIHPBar/target/release/ahb --ascii | grep -qP '^mock-session  ######---- 60% \| resets in [0-9]+h[0-9]{2}m$'
+$ echo $?  # → 0 (MATCH)
+```
+
+### Visual eyeball (per Pitfall 4 definition of "renders correctly")
+
+| Environment | Result | Notes |
+|-------------|--------|-------|
+| Native: kitty (xterm-256color) | ✓ renders correctly | Chasel eyeballed on dev box 2026-05-22; all 5 criteria (a)-(e) confirmed |
+| tmux | ⊘ not installed on dev box | `which tmux` → "tmux not found"; Pitfall 4 best-effort carve-out invoked |
+| screen | ⊘ not installed on dev box | Same as tmux; Pitfall 4 carve-out |
+| Windows Terminal | ⊘ deferred — no Windows machine on dev box | CI matrix on `windows-latest` (Plan 01 `.github/workflows/ci.yml`) provides byte-level proof per first push; awaiting CI green |
+
+Definition met (Pitfall 4 lines 408-413):
+- (a) U+2588 single column-wide solid block — **YES**
+- (b) U+2591 single column-wide light shade — **YES**
+- (c) U+2022 does not consume two columns — **YES**
+- (d) no U+FFFD replacement character — **YES**
+- (e) no "tofu" rectangle — **YES**
+
+Overall verdict: **charset verified** on kitty (binding eyeball + binding byte-proof). tmux/screen/Windows-Terminal rows are best-effort per Pitfall 4; CI matrix `windows-latest` is the binding cross-platform proxy once Phase 0 is pushed.
 
 ## Sample fixtures status (D-24)
 
