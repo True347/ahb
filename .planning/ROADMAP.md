@@ -31,7 +31,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `cargo test` runs green against `MockProvider`-based unit tests of the trait, confirming `model.rs` is `Serialize` + `Deserialize` + `Send + Sync` + dyn-safe.
   4. Charset decision is recorded (ASCII default vs. emoji opt-in) and verified to render correctly in tmux, screen, and Windows Terminal.
   5. Repo is scaffolded with MSRV pin (≥1.88), clippy config (`unwrap_used = deny` for adapter/render paths), and a CI skeleton that runs `cargo build` + `cargo test` + `cargo clippy`.
-**Plans:** TBD
+**Plans:** 5 plans
+Plans:
+- [ ] 00-01-PLAN.md — Repo scaffold + Cargo.toml + LICENSE × 2 + clippy.toml + 3-OS CI workflow (placeholder binary; no domain code) [wave 1]
+- [ ] 00-02-PLAN.md — Lock model.rs contract types + Provider trait + FetchCtx + Secrets stub + dyn-safety asserts [wave 2]
+- [ ] 00-03-PLAN.md — MockProvider + cli/render_text + main.rs panic hook + clap; cargo run prints the D-25 literal through the trait [wave 3]
+- [ ] 00-04-PLAN.md — Gemini local-capture go/no-go spike memo at .planning/research/GEMINI_SPIKE.md (9 required sections per D-23) [wave 2]
+- [ ] 00-05-PLAN.md — Phase 0 smoke + charset verification (xxd byte proof + visual eyeball) + Phase 0 success-criteria checklist [wave 4]
 
 ### Phase 1: Engine + Claude + TUI Scaffold
 **Goal:** Make `AHB` and `AHB tui` work end-to-end against a real Claude Code subscription, with keyring-backed secrets, panic-safe terminal restore, and per-adapter error isolation wired in BEFORE feature code so the foundation is correct from day one.
@@ -90,7 +96,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Spike & Spine | 0/TBD | Not started | - |
+| 0. Spike & Spine | 0/5 | Not started | - |
 | 1. Engine + Claude + TUI Scaffold | 0/TBD | Not started | - |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
