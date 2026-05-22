@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 00-spike-spine 00-02-PLAN.md (contract spine)
-last_updated: "2026-05-22T12:08:45.945Z"
+stopped_at: Completed 00-spike-spine 00-03-PLAN.md (runtime spine wiring)
+last_updated: "2026-05-22T13:31:01Z"
 last_activity: 2026-05-22
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 00 (spike-spine) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5 (Wave 3 done; only Plan 05 smoke + charset verification remains)
 Status: Ready to execute
 Last activity: 2026-05-22
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -57,7 +57,8 @@ Progress: [████░░░░░░] 40%
 
 *Updated after each plan completion*
 | Phase 00-spike-spine P01 | 3m | 3 tasks | 9 files |
-| Phase 00-spike-spine P02 | 5m | - tasks | - files |
+| Phase 00-spike-spine P02 | 5m | 2 tasks | 4 files |
+| Phase 00-spike-spine P03 | 6m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 0-02]: ProviderState.source uses Cow<'static, str> (W-2) so serde round-trip yields Cow::Owned without lifetime errors; adapter ergonomics preserved via Cow::Borrowed for static labels.
 - [Phase ?]: [Phase 0-02]: Phase 0 lint floor relocated to src/lib.rs (crate root) so all modules inherit deny(unwrap/expect/panic) + warn(pedantic) automatically.
 - [Phase ?]: [Phase 0-02]: FetchCtx<'a> locked at minimal 2 fields (now, &Secrets); derives Copy because jiff::Timestamp is Copy. Additive fields deferred to Phase 1.
+- [Phase ?]: [Phase 0-03]: jiff::Timestamp::since defaults to Unit::Second as the largest unit; for hours+minutes balanced spans, call since((Unit::Hour, *now)). RESEARCH's verbatim example used the default since() which silently broke the 2h00m countdown. Documented in Plan 03 Deviation 1.
+- [Phase ?]: [Phase 0-03]: Wall-clock reads centralized at the binary entry boundary — src/main.rs is the only Phase 0 caller of jiff::Timestamp::now(); MockProvider uses ctx.now (clock-injection contract). Future adapters must follow the same rule (acceptance grep guards mock.rs).
+- [Phase ?]: [Phase 0-03]: Phase 0 panic-hook (install_phase0_panic_hook) composes via take_hook+set_hook, called as the FIRST line of main(). Phase 1's ratatui::init() will wrap it cleanly per D-27 + Pitfall 5.
 
 ### Pending Todos
 
@@ -100,6 +104,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-22T12:08:45.931Z
-Stopped at: Completed 00-spike-spine 00-02-PLAN.md (contract spine)
+Last session: 2026-05-22T13:31:01Z
+Stopped at: Completed 00-spike-spine 00-03-PLAN.md (runtime spine wiring; cargo run prints the D-25 bar via the locked trait)
 Resume file: None

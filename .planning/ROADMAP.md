@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Charset decision is recorded (ASCII default vs. emoji opt-in) and verified to render correctly in tmux, screen, and Windows Terminal.
   5. Repo is scaffolded with MSRV pin (≥1.88), clippy config (`unwrap_used = deny` for adapter/render paths), and a CI skeleton that runs `cargo build` + `cargo test` + `cargo clippy`.
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 Plans:
 **Wave 1**
 
@@ -48,7 +48,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 00-03-PLAN.md — MockProvider + cli/render_text + main.rs panic hook + clap; cargo run prints the D-25 literal through the trait [wave 3]
+- [x] 00-03-PLAN.md — MockProvider + cli/render_text + main.rs panic hook + clap; cargo run prints the D-25 literal through the trait [wave 3]
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -123,7 +123,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Spike & Spine | 3/5 | In Progress|  |
+| 0. Spike & Spine | 4/5 | In Progress|  |
 | 1. Engine + Claude + TUI Scaffold | 0/TBD | Not started | - |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
