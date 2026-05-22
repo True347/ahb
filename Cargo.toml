@@ -1,0 +1,30 @@
+# Cargo.toml — Phase 0
+[package]
+name = "ahb"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+description = "AHB — AI HP Bar — multi-CLI subscription session usage at a glance"
+repository = "https://github.com/True347/ahb"
+readme = "README.md"
+keywords = ["claude", "codex", "gemini", "cli", "tui"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+clap = { version = "4.6", features = ["derive"] }
+# Phase 0 dep minimalism — features kept to ["rt", "macros"]; Phase 1 may upgrade to "rt-multi-thread" when first network adapter ships.
+tokio = { version = "1.52", default-features = false, features = ["rt", "macros"] }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+jiff = { version = "0.2", features = ["serde"] }
+anyhow = "1"
+thiserror = "2"
+owo-colors = { version = "4", features = ["supports-colors"] }
+
+[dev-dependencies]
+static_assertions = "1"
+
+[profile.release]
+# Phase 4 will tune more. Phase 0 default is fine.
