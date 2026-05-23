@@ -40,6 +40,9 @@ findings:
   warning: 7
   info: 6
   total: 14
+fixes_applied:
+  count: 2
+  ids: [CR-01, IN-01]
 status: issues_found
 ---
 
