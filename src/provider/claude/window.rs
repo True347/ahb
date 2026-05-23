@@ -8,6 +8,11 @@
 //! `cache_creation_input_tokens` is the only reliable budget-aligned counter).
 //!
 //! Phase 1 uses `CLAUDE_5H_TOKEN_LIMIT = 44_000` (Pro-tier estimate; D-44).
+//!
+//! Gap comparison uses `Span::total(Unit::Second) > FIVE_HOURS_SECS` (strict-greater) —
+//! preserves sub-hour precision (BL-03 fix). The prior hour-component-only comparison
+//! dropped sub-hour components AND used non-strict inequality, double-misclassifying
+//! the boundary.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(clippy::pedantic)]
@@ -19,6 +24,12 @@ use crate::provider::claude::jsonl::AssistantEntry;
 /// bars — Phase 2 may add a `plan_tier` knob (CFG-03). Source: tokenmix.ai 2026 +
 /// ccusage community measurements.
 pub const CLAUDE_5H_TOKEN_LIMIT: u64 = 44_000;
+
+/// Strict 5h boundary in seconds, used by `find_active_cluster` for the gap comparison.
+/// Matches the module doc "> 5h" wording: a 5h 0m 0s gap does NOT split (boundary
+/// exact), a 5h 0m 1s gap DOES split (BL-03 fix — replaces the prior
+/// hour-component-only check that ignored sub-hour precision).
+const FIVE_HOURS_SECS: f64 = 5.0 * 3600.0;
 
 /// One active 5h cluster. `session_start` anchors the window; `reset_at = session_start + 5h`.
 #[derive(Debug, Clone)]
@@ -43,12 +54,17 @@ pub fn find_active_cluster(sorted_msgs: &[AssistantEntry]) -> Option<Cluster> {
         let prev = &sorted_msgs[i - 1];
         let curr = &sorted_msgs[i];
         // Gap = curr.timestamp - prev.timestamp (curr is newer because sorted ascending).
-        let Ok(gap) = curr.timestamp.since((jiff::Unit::Hour, prev.timestamp)) else {
+        // BL-03 fix: no `(Unit::Hour, _)` largest-unit constraint on `since` so jiff
+        // auto-picks the largest meaningful unit; then `.total(Unit::Second)` reduces
+        // to a scalar that preserves sub-hour precision. Strict-greater operator
+        // matches the module-doc "> 5h" wording (exactly-5h does NOT split).
+        let Ok(gap) = curr.timestamp.since(prev.timestamp) else {
             continue;
         };
-        // Compare in hours (Span is calendrical; compare directly).
-        let gap_hours = gap.get_hours();
-        if gap_hours >= 5 {
+        let Ok(gap_secs) = gap.total(jiff::Unit::Second) else {
+            continue;
+        };
+        if gap_secs > FIVE_HOURS_SECS {
             // The cluster starts at `i` (curr is the first message after the gap).
             start_idx = i;
             break;
@@ -159,6 +175,65 @@ mod tests {
         );
         // Only C + D are summed.
         assert_eq!(cluster.used_tokens, 1200);
+    }
+
+    #[test]
+    fn gap_just_under_5h_does_not_split() {
+        // BL-03 boundary lock: a 4h 59m 30s gap (strictly less than 5h) does NOT
+        // split the cluster. Under the prior hour-component-only code the hour
+        // component was 4 so this case happened to pass, but the new total-seconds
+        // path proves the boundary is enforced precisely.
+        let msgs = vec![
+            make_entry("2026-05-23T12:00:00Z", 100),
+            make_entry("2026-05-23T16:59:30Z", 200),
+        ];
+        let cluster = find_active_cluster(&msgs).unwrap();
+        assert_eq!(
+            cluster.session_start,
+            "2026-05-23T12:00:00Z".parse::<jiff::Timestamp>().unwrap(),
+            "4h59m30s gap must NOT split (BL-03 — strict > 5h)"
+        );
+        assert_eq!(cluster.used_tokens, 300);
+    }
+
+    #[test]
+    fn gap_exactly_5h_does_not_split() {
+        // BL-03 boundary lock: exactly-5h gap (= boundary) does NOT split per the
+        // strict `> 5h` doc contract. Under the prior hour-component-only code this
+        // case INCORRECTLY split (non-strict comparator on the hour component); the
+        // strict-greater path on total-seconds fixes it.
+        let msgs = vec![
+            make_entry("2026-05-23T12:00:00Z", 100),
+            make_entry("2026-05-23T17:00:00Z", 200),
+        ];
+        let cluster = find_active_cluster(&msgs).unwrap();
+        assert_eq!(
+            cluster.session_start,
+            "2026-05-23T12:00:00Z".parse::<jiff::Timestamp>().unwrap(),
+            "exactly-5h gap must NOT split per strict > 5h doc contract (BL-03)"
+        );
+        assert_eq!(cluster.used_tokens, 300);
+    }
+
+    #[test]
+    fn gap_just_over_5h_does_split() {
+        // BL-03 boundary lock: 5h 0m 30s gap (strictly greater than 5h) MUST split.
+        // Under the prior hour-component-only code this happened to split too, but
+        // the new path proves the boundary is enforced precisely on the upper side.
+        let msgs = vec![
+            make_entry("2026-05-23T12:00:00Z", 100),
+            make_entry("2026-05-23T17:00:30Z", 200),
+        ];
+        let cluster = find_active_cluster(&msgs).unwrap();
+        assert_eq!(
+            cluster.session_start,
+            "2026-05-23T17:00:30Z".parse::<jiff::Timestamp>().unwrap(),
+            "5h0m30s gap MUST split (BL-03 fix — strict > 5h)"
+        );
+        assert_eq!(
+            cluster.used_tokens, 200,
+            "only second entry remains in active cluster"
+        );
     }
 
     #[test]
