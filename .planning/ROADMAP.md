@@ -68,7 +68,7 @@ Plans:
   4. The TOML config (resolved via the `directories` crate, cross-OS) lists providers with independent enable/disable flags; un-configured providers are silently skipped (not flagged as failures); secrets are stored in OS keyring via `keyring-core` 1.0 and wrapped in a `Secret<T>` newtype whose `Debug` impl redacts the value (CI grep test confirms no plaintext credential pattern in any output).
   5. When Claude Code's JSONL schema changes and too many expected fields go missing, the Claude row renders a visible "Claude adapter may be out-of-date" sentinel instead of silently zeroing the bar.
 
-**Plans:** 3/3 plans complete
+**Plans:** 3/4 plans complete
 
 **Wave 1**
 
@@ -81,6 +81,10 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 01-03-PLAN.md — TUI surface: ratatui::run + 15s/1s tick loop + non-TTY refusal + panic-safe restore [wave 3]
+
+**Wave 4** *(blocked on Wave 3 completion — gap closure from 01-VERIFICATION.md)*
+
+- [ ] 01-04-PLAN.md — BL-01 clock-injection in TUI render + BL-02 deterministic provider row order + BL-03 5h gap boundary + WR-06 cross-OS config path + WR-08 dead-code removal [wave 4]
 
 **UI hint:** yes
 
