@@ -9,11 +9,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Core (CLI Entry)
 
-- [ ] **CORE-01**: 不帶 argument 跑 `AHB` 預設輸出所有設定 provider 的緊湊一行 HP bar（含 % + reset 倒數）
+- [x] **CORE-01**: 不帶 argument 跑 `AHB` 預設輸出所有設定 provider 的緊湊一行 HP bar（含 % + reset 倒數）
 - [ ] **CORE-02**: `AHB --compact` 強制緊湊輸出
 - [ ] **CORE-03**: `AHB --detailed` 多行 per provider，含 session 與 weekly 兩條 bar
 - [ ] **CORE-04**: `AHB --json` 輸出帶 `schema_version: 1` 的穩定 JSON 結構，安全可供 tmux / Starship / shell pipeline 消費
-- [ ] **CORE-05**: CLI 在非 TTY（被 pipe）情境下自動關閉色彩、ANSI escape；尊重 `NO_COLOR` 環境變數
+- [x] **CORE-05**: CLI 在非 TTY（被 pipe）情境下自動關閉色彩、ANSI escape；尊重 `NO_COLOR` 環境變數
 - [ ] **CORE-06**: 適當 exit code — 0 表示至少一個 provider 正常；1 表示全部 provider 失敗；2 表示 config / secrets 不可用
 
 ### TUI
@@ -26,23 +26,23 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Config
 
-- [ ] **CFG-01**: TOML config 檔列出要追蹤的 provider 清單，每個 provider 可獨立啟用 / 停用
-- [ ] **CFG-02**: Config 檔位於 cross-platform 標準位置（`directories` crate 處理 Linux/macOS/Windows 差異）
+- [x] **CFG-01**: TOML config 檔列出要追蹤的 provider 清單，每個 provider 可獨立啟用 / 停用
+- [x] **CFG-02**: Config 檔位於 cross-platform 標準位置（`directories` crate 處理 Linux/macOS/Windows 差異）
 - [ ] **CFG-03**: Config 允許 per-provider 指定 refresh interval、limit 覆寫、auth 來源
-- [ ] **CFG-04**: 未配置的 provider 自動 skip 不顯示，不算 failure
+- [x] **CFG-04**: 未配置的 provider 自動 skip 不顯示，不算 failure
 
 ### Secrets
 
 - [ ] **SEC-01**: 所有 provider 認證（cookie、token、session id）一律存進 OS keyring（`keyring-core` 1.0；macOS Keychain / Win Cred Manager / Linux Secret Service）
 - [ ] **SEC-02**: 內部以 `Secret<T>` newtype 包裝，`Debug` 自動 redact、`#[serde(skip)]` 防意外序列化
 - [ ] **SEC-03**: `--json` / log / error message 中絕不出現原始 secret 值（CI grep 測試守住）
-- [ ] **SEC-04**: 純無 secret 的 provider（如 Claude Code 純讀本地）仍走相同介面（不破壞統一 contract）
+- [x] **SEC-04**: 純無 secret 的 provider（如 Claude Code 純讀本地）仍走相同介面（不破壞統一 contract）
 
 ### Provider Adapters
 
 - [x] **ADP-00**: `Provider` trait + `FetchCtx` + `ProviderState` / `ResetInfo` / `HpUnit` / `ProviderError` 統一介面，三家共用
-- [ ] **ADP-01**: Adapter 失敗只影響該 provider — 不會讓整個 AHB crash 或 blank（per-adapter timeout + `Vec<Result<...>>` + cache stale fallback）
-- [ ] **ADP-02**: Claude Code adapter — 從 `~/.claude/projects/**/*.jsonl` 計算 5h rolling window 用量 + reset 時間（不依賴 stats-cache.json 為 source of truth）
+- [x] **ADP-01**: Adapter 失敗只影響該 provider — 不會讓整個 AHB crash 或 blank（per-adapter timeout + `Vec<Result<...>>` + cache stale fallback）
+- [x] **ADP-02**: Claude Code adapter — 從 `~/.claude/projects/**/*.jsonl` 計算 5h rolling window 用量 + reset 時間（不依賴 stats-cache.json 為 source of truth）
 - [ ] **ADP-03**: Claude adapter schema drift sentinel — 當期望欄位大量缺失時顯示「adapter may be out-of-date」警告
 - [ ] **ADP-04**: Codex CLI adapter — read-only 開啟 `~/.codex/state_*.sqlite`（動態 version glob）+ `busy_timeout` + 偏好 append-only JSONL rollouts；`rate_limits: null` 視為 unknown
 - [ ] **ADP-05**: Gemini CLI adapter — **conditional on Phase 0 spike**。若 spike pass：HTTP 走 `gemini.google.com/usage`（或更安全的 local `gemini /stats` capture），refresh 最少 5min、ETag、daily ceiling、README ToS warning。若 spike fail：stub 在 v2 opt-in flag 後，README 寫明 deferred 原因。
@@ -99,28 +99,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
 | CORE-02 | Phase 2 | Pending |
 | CORE-03 | Phase 2 | Pending |
 | CORE-04 | Phase 2 | Pending |
-| CORE-05 | Phase 1 | Pending |
+| CORE-05 | Phase 1 | Complete |
 | CORE-06 | Phase 2 | Pending |
 | TUI-01 | Phase 1 | Pending |
 | TUI-02 | Phase 1 | Pending |
 | TUI-03 | Phase 3 | Pending |
 | TUI-04 | Phase 1 | Pending |
 | TUI-05 | Phase 1 | Pending |
-| CFG-01 | Phase 1 | Pending |
-| CFG-02 | Phase 1 | Pending |
+| CFG-01 | Phase 1 | Complete |
+| CFG-02 | Phase 1 | Complete |
 | CFG-03 | Phase 3 | Pending |
-| CFG-04 | Phase 1 | Pending |
+| CFG-04 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Pending |
 | SEC-02 | Phase 1 | Pending |
 | SEC-03 | Phase 2 | Pending |
-| SEC-04 | Phase 1 | Pending |
+| SEC-04 | Phase 1 | Complete |
 | ADP-00 | Phase 0 | Complete |
-| ADP-01 | Phase 1 | Pending |
-| ADP-02 | Phase 1 | Pending |
+| ADP-01 | Phase 1 | Complete |
+| ADP-02 | Phase 1 | Complete |
 | ADP-03 | Phase 1 | Pending |
 | ADP-04 | Phase 2 | Pending |
 | ADP-05 | Phase 3 | Pending (conditional on Phase 0 spike) |

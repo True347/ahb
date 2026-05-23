@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-05-23T02:22:06.779Z"
-last_activity: 2026-05-23 -- Phase 01 planning complete
+last_updated: "2026-05-23T05:34:21.674Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 20
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 00 — spike-spine
+**Current focus:** Phase 01 — engine-claude-tui-scaffold
 
 ## Current Position
 
-Phase: 00 — COMPLETE
-Plan: 4 of 5 (Wave 3 done; only Plan 05 smoke + charset verification remains)
+Phase: 01 (engine-claude-tui-scaffold) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-05-23 -- Phase 01 planning complete
+Last activity: 2026-05-23
 
-Progress: [██████░░░░] 60%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [██████░░░░] 60%
 | Phase 00-spike-spine P01 | 3m | 3 tasks | 9 files |
 | Phase 00-spike-spine P02 | 5m | 2 tasks | 4 files |
 | Phase 00-spike-spine P03 | 6m | 3 tasks | 6 files |
+| Phase 01-engine-claude-tui-scaffold P01 | 17min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,10 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 0-03]: jiff::Timestamp::since defaults to Unit::Second as the largest unit; for hours+minutes balanced spans, call since((Unit::Hour, *now)). RESEARCH's verbatim example used the default since() which silently broke the 2h00m countdown. Documented in Plan 03 Deviation 1.
 - [Phase ?]: [Phase 0-03]: Wall-clock reads centralized at the binary entry boundary — src/main.rs is the only Phase 0 caller of jiff::Timestamp::now(); MockProvider uses ctx.now (clock-injection contract). Future adapters must follow the same rule (acceptance grep guards mock.rs).
 - [Phase ?]: [Phase 0-03]: Phase 0 panic-hook (install_phase0_panic_hook) composes via take_hook+set_hook, called as the FIRST line of main(). Phase 1's ratatui::init() will wrap it cleanly per D-27 + Pitfall 5.
+- [Phase ?]: [Phase 01-01]: Engine fan-out uses JoinSet + HashMap<task::Id, ProviderId> for Pitfall L4 panic recovery; DEFAULT_PER_PROVIDER_TIMEOUT = 2s for Phase 1 (local IO).
+- [Phase ?]: [Phase 01-01]: ClaudeProvider sums cache_creation_input_tokens ONLY (D-33 amended per L1; input_tokens+output_tokens are upstream-broken streaming placeholders per ccusage #866). Window label is 'claude' (provider id), not 'claude-5h' — UI-SPEC binding.
+- [Phase ?]: [Phase 01-01]: config::load_or_init returns LoadOutcome::{Initialized, Loaded} (caller decides exit); D-37 first-run path writes embedded template via include_str! and prints 'initialized {} — enable providers and rerun'.
+- [Phase ?]: [Phase 01-01]: filled_cells / format_countdown / id_label promoted to pub(crate) so Plan 03 TUI widget re-uses without duplication or scoped-clippy drift (WARNING #3 + #5 resolutions).
 
 ### Pending Todos
 
@@ -104,6 +109,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-22T23:56:02.613Z
+Last session: 2026-05-23T05:33:57.781Z
 Stopped at: Phase 1 context gathered
-Resume file: /home/chasel/REPO/AIHPBar/.planning/phases/01-engine-claude-tui-scaffold/01-CONTEXT.md
+Resume file: None
