@@ -24,6 +24,14 @@ impl Provider for MockProvider {
         // a panic inside one adapter does NOT crash the process and does NOT blank
         // healthy adapters. The scoped `#[allow(clippy::panic)]` is the only deviation
         // from the lib.rs lint floor — see PATTERNS.md `provider/mock.rs (modified)`.
+        //
+        // CR-01 fix: `#[cfg(debug_assertions)]`-gated so cargo-dist release builds
+        // cannot compile this fault-injection branch into the shipped binary. This
+        // matches the sibling gating on `Cli::debug_emit_fake_secret` (cli/mod.rs:37)
+        // and `AHB_SECRETS_MOCK` (secrets.rs:115). Integration tests
+        // (`tests/panic_isolation.rs`, `tests/tui_panic_safe_restore.rs`) run under
+        // cargo's dev profile so they retain the panic path.
+        #[cfg(debug_assertions)]
         if std::env::var_os("AHB_DEBUG_PANIC").as_deref()
             == Some(std::ffi::OsStr::new("adapter:mock"))
         {
