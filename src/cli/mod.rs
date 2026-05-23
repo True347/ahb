@@ -1,7 +1,9 @@
-//! CLI surface for AHB. Phase 1 (Task 3):
+//! CLI surface for AHB. Phase 1:
 //! - `Cli` struct + `Command` subcommand enum moved out of `main.rs`.
 //! - `run_compact(engine, ascii, color)` dispatches the default no-subcommand path.
-//! - TUI subcommand is reserved for Plan 03; current stub returns an error.
+//! - `Command::Tui` is dispatched by `main.rs` to `ahb::tui::run(engine).await`
+//!   (Plan 03 wired the real ratatui surface; Plan 04 deleted the obsolete
+//!   Phase 0 TUI stub placeholder, see WR-08).
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(clippy::pedantic)]
@@ -87,15 +89,6 @@ pub async fn run_compact(
         }
     }
     Ok(())
-}
-
-/// Stub for `AHB tui` until Plan 03 wires the real ratatui surface.
-///
-/// # Errors
-///
-/// Always returns an error in Phase 1 — Plan 03 replaces with the real TUI loop.
-pub fn run_tui_stub() -> anyhow::Result<()> {
-    Err(anyhow::anyhow!("AHB tui will be wired in Plan 03"))
 }
 
 /// D-43 integration tier (BLOCKER #1 path-b). Emits a one-line JSON envelope containing

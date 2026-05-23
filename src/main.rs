@@ -65,8 +65,22 @@ async fn main() -> anyhow::Result<()> {
     let secrets = match secrets::init()? {
         InitOutcome::Ready(s) => s,
         InitOutcome::Unavailable => {
+            // TODO(future-phase): the [secrets].storage = "file" escape-hatch is
+            // documented intent but not yet wired in Config. The message below
+            // preserves the documented contract; a future plan must extend Config
+            // with a [secrets] table + secrets::init to honor it. See 01-REVIEW.md
+            // WR-06 disposition (a).
+            //
+            // WR-06 fix: cross-OS path resolution — directories::ProjectDirs picks
+            // ~/.config on Linux, ~/Library/Application Support on macOS,
+            // %APPDATA% on Windows. NEVER unwrap — degrade gracefully to the
+            // literal fallback if resolution fails on exotic platforms.
+            let cfg_path_display = config::default_path().ok().map_or_else(
+                || "your AHB config file".to_string(),
+                |p| p.display().to_string(),
+            );
             eprintln!(
-                "no secret store available on this system; set [secrets].storage = \"file\" in ~/.config/ahb/config.toml to opt into 0600 file storage"
+                "no secret store available on this system; set [secrets].storage = \"file\" in {cfg_path_display} to opt into 0600 file storage"
             );
             std::process::exit(2);
         }
