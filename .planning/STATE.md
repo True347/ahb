@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-05-23T10:24:13.780Z"
+status: ready_to_plan
+stopped_at: Phase 01 complete (4/4) — ready to discuss Phase 2
+last_updated: 2026-05-23T13:30:49.743Z
 last_activity: 2026-05-23
 progress:
   total_phases: 5
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 01 — engine-claude-tui-scaffold
+**Current focus:** Phase 2 — codex + output formats
 
 ## Current Position
 
-Phase: 01 (engine-claude-tui-scaffold) — EXECUTING
-Plan: 2 of 4
-Status: Ready to execute
+Phase: 2
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-23
 
 Progress: [██████████] 100%
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 4
 - Average duration: —
 - Total execution time: 0 hours
 
@@ -49,6 +49,7 @@ Progress: [██████████] 100%
 | 2. Codex + Output | 0 | — | — |
 | 3. Gemini + Cache | 0 | — | — |
 | 4. Distribution | 0 | — | — |
+| 01 | 4 | - | - |
 
 **Recent Trend:**
 
