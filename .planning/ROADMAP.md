@@ -68,7 +68,20 @@ Plans:
   4. The TOML config (resolved via the `directories` crate, cross-OS) lists providers with independent enable/disable flags; un-configured providers are silently skipped (not flagged as failures); secrets are stored in OS keyring via `keyring-core` 1.0 and wrapped in a `Secret<T>` newtype whose `Debug` impl redacts the value (CI grep test confirms no plaintext credential pattern in any output).
   5. When Claude Code's JSONL schema changes and too many expected fields go missing, the Claude row renders a visible "Claude adapter may be out-of-date" sentinel instead of silently zeroing the bar.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+**Wave 1**
+
+- [ ] 01-01-PLAN.md — Walking Skeleton vertical slice: engine + Claude adapter + config + CLI render-multi-row + first-run init [wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 01-02-PLAN.md — Secret<T> + keyring-core wiring + D-43 grep test + schema-drift sentinel + panic-injection mock [wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 01-03-PLAN.md — TUI surface: ratatui::run + 15s/1s tick loop + non-TTY refusal + panic-safe restore [wave 3]
+
 **UI hint:** yes
 
 ### Phase 2: Codex + Output Formats
@@ -124,7 +137,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
-| 1. Engine + Claude + TUI Scaffold | 0/TBD | Not started | - |
+| 1. Engine + Claude + TUI Scaffold | 0/3 | Planned | - |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
 | 4. Distribution & Release Polish | 0/TBD | Not started | - |
