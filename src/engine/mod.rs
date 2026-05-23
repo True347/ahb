@@ -82,18 +82,38 @@ impl Engine {
     }
 
     /// Fan out one fetch across all enabled providers. Returns
-    /// `Vec<(ProviderId, Result<ProviderState, ProviderError>)>` (Phase 0 contract).
+    /// `Vec<(ProviderId, Result<ProviderState, ProviderError>)>` in canonical
+    /// `ProviderId` order (Claude=0, Codex=1, Gemini=2, Mock=3) regardless of which
+    /// adapter completed first — fanout produces arrival order, the engine sorts
+    /// to satisfy the UI-SPEC fixed-row contract (BL-02 fix).
     pub async fn refresh_all(
         &self,
         now: jiff::Timestamp,
     ) -> Vec<(ProviderId, Result<ProviderState, ProviderError>)> {
-        fanout::refresh_all_inner(
+        let mut results = fanout::refresh_all_inner(
             &self.providers,
             now,
             Arc::clone(&self.secrets),
             self.per_provider_timeout,
         )
-        .await
+        .await;
+        // BL-02: canonical row order lives at the engine boundary — single source of
+        // truth. Fanout still advertises arrival order; CLI / TUI consumers do not
+        // re-sort.
+        results.sort_by_key(|(id, _)| Self::sort_key(*id));
+        results
+    }
+
+    /// Canonical row order for `refresh_all` output. Mock is last because it is
+    /// debug / fault-injection only, not a user-facing provider.
+    #[must_use]
+    fn sort_key(id: ProviderId) -> u8 {
+        match id {
+            ProviderId::Claude => 0,
+            ProviderId::Codex => 1,
+            ProviderId::Gemini => 2,
+            ProviderId::Mock => 3,
+        }
     }
 }
 
@@ -141,6 +161,29 @@ mod tests {
         let state = result.as_ref().unwrap();
         assert_eq!(state.id, ProviderId::Mock);
         assert_eq!(state.fetched_at, now);
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn refresh_all_returns_canonical_order_with_mock_only() {
+        // BL-02: confirm the engine-layer sort runs even with a single provider.
+        // The multi-provider permutation case (where order actually matters) is
+        // covered by tests/engine_row_order.rs.
+        let cfg = Config {
+            providers: Providers {
+                mock: ProviderConfig { enabled: true },
+                ..Default::default()
+            },
+        };
+        let engine = Engine::new(cfg, Secrets::default());
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let results = engine.refresh_all(now).await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].0,
+            ProviderId::Mock,
+            "single mock row appears with canonical position"
+        );
     }
 
     #[tokio::test]
