@@ -1,0 +1,200 @@
+//! Claude Code provider adapter (REQ ADP-02).
+//!
+//! Phase 1 flow:
+//! 1. Glob `~/.claude/projects/**/*.jsonl` (via `home_dir.join(".claude").join("projects")`).
+//! 2. Stream each JSONL file via `jsonl::read_assistant_entries` (D-35 tolerance).
+//! 3. Merge + sort by `timestamp`.
+//! 4. Cluster anchor via `window::find_active_cluster` (D-33 amended: 5h gap walk).
+//! 5. `percent_remaining = window::percent_remaining(used, limit)`.
+//! 6. Build one `HpWindow` and return `ProviderState` (CORE-01 single row).
+//!
+//! Error rows (UI-SPEC LOCKED literals):
+//! - missing `~/.claude/projects` → `Err(Unavailable { reason: "~/.claude/projects not found — is Claude Code installed?" })`
+//! - empty cluster → `Err(Unavailable { reason: "no claude sessions found in ~/.claude/projects — run Claude Code at least once" })`
+
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![warn(clippy::pedantic)]
+
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
+
+use async_trait::async_trait;
+
+use crate::model::{HpWindow, ProviderError, ProviderId, ProviderState, ResetInfo};
+use crate::provider::{FetchCtx, Provider};
+
+pub mod jsonl;
+pub mod window;
+
+pub use window::CLAUDE_5H_TOKEN_LIMIT;
+
+/// Claude Code adapter. `base_path` is `home_dir.join(".claude").join("projects")`
+/// (configurable for test injection via `new(home_dir, token_limit)`); `token_limit`
+/// defaults to `CLAUDE_5H_TOKEN_LIMIT` in production wiring.
+pub struct ClaudeProvider {
+    base_path: PathBuf,
+    token_limit: u64,
+}
+
+impl ClaudeProvider {
+    /// Construct from a `home_dir` (typically `dirs::home_dir()`) and a token-limit budget.
+    /// Tests use a `tempfile::tempdir()` for `home_dir` to avoid touching the real home.
+    #[must_use]
+    pub fn new(home_dir: &Path, token_limit: u64) -> Self {
+        Self {
+            base_path: home_dir.join(".claude").join("projects"),
+            token_limit,
+        }
+    }
+}
+
+#[async_trait]
+impl Provider for ClaudeProvider {
+    fn id(&self) -> ProviderId {
+        ProviderId::Claude
+    }
+
+    async fn fetch(&self, ctx: &FetchCtx<'_>) -> Result<ProviderState, ProviderError> {
+        // SEC-04: Claude needs no secrets; the contract still hands them through.
+        let _ = ctx.secrets;
+
+        if !self.base_path.exists() {
+            return Err(ProviderError::Unavailable {
+                reason: "~/.claude/projects not found — is Claude Code installed?".into(),
+            });
+        }
+        let files = jsonl::discover_session_files(&self.base_path);
+        let mut merged: Vec<jsonl::AssistantEntry> = Vec::new();
+        for f in files {
+            let entries = jsonl::read_assistant_entries(&f);
+            merged.extend(entries);
+        }
+        // Sort ascending by timestamp.
+        merged.sort_by_key(|e| e.timestamp);
+        let Some(cluster) = window::find_active_cluster(&merged) else {
+            return Err(ProviderError::Unavailable {
+                reason: "no claude sessions found in ~/.claude/projects — run Claude Code at least once".into(),
+            });
+        };
+        let pct = window::percent_remaining(cluster.used_tokens, self.token_limit);
+        let win = HpWindow {
+            label: Cow::Borrowed("claude-5h"),
+            percent_remaining: pct,
+            reset: ResetInfo {
+                resets_at: cluster.reset_at,
+            },
+            bar_color: None,
+        };
+        Ok(ProviderState {
+            id: ProviderId::Claude,
+            windows: vec![win],
+            fetched_at: ctx.now,
+            source: Cow::Borrowed("claude-jsonl"),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::secrets::Secrets;
+    use static_assertions::assert_impl_all;
+    use std::io::Write;
+
+    assert_impl_all!(ClaudeProvider: Send, Sync);
+    assert_impl_all!(Box<dyn Provider>: Send, Sync);
+
+    const FIXTURE_ASSISTANT_LINE: &str = r#"{"parentUuid":"abc","isSidechain":false,"message":{"model":"claude-opus-4-7","id":"msg_x","type":"message","role":"assistant","content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"cache_creation_input_tokens":4400,"cache_read_input_tokens":1000,"output_tokens":186}},"type":"assistant","uuid":"u1","timestamp":"2026-05-23T11:00:00Z"}"#;
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn fetch_against_tempdir_with_one_assistant_entry() {
+        let home = tempfile::tempdir().unwrap();
+        let projects_dir = home.path().join(".claude").join("projects").join("proj-a");
+        std::fs::create_dir_all(&projects_dir).unwrap();
+        let mut file =
+            std::fs::File::create(projects_dir.join("session.jsonl")).unwrap();
+        writeln!(file, "{FIXTURE_ASSISTANT_LINE}").unwrap();
+
+        let provider = ClaudeProvider::new(home.path(), CLAUDE_5H_TOKEN_LIMIT);
+        let secrets = Secrets::default();
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let ctx = FetchCtx { now, secrets: &secrets };
+
+        let state = provider.fetch(&ctx).await.unwrap();
+        assert_eq!(state.id, ProviderId::Claude);
+        assert_eq!(state.windows.len(), 1);
+        assert_eq!(state.source, "claude-jsonl");
+        assert_eq!(state.fetched_at, now);
+        // Single cluster, 4400 used out of 44000 → 90% remaining
+        assert!(
+            (state.windows[0].percent_remaining - 90.0).abs() < 0.01,
+            "expected ~90% remaining, got {}",
+            state.windows[0].percent_remaining
+        );
+        // session_start = 11:00 → reset_at = 16:00
+        let expected_reset: jiff::Timestamp = "2026-05-23T16:00:00Z".parse().unwrap();
+        assert_eq!(state.windows[0].reset.resets_at, expected_reset);
+        assert_eq!(state.windows[0].label, "claude-5h");
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn missing_projects_directory_returns_ui_spec_literal() {
+        let home = tempfile::tempdir().unwrap();
+        // Deliberately do NOT create .claude/projects.
+        let provider = ClaudeProvider::new(home.path(), CLAUDE_5H_TOKEN_LIMIT);
+        let secrets = Secrets::default();
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let ctx = FetchCtx { now, secrets: &secrets };
+
+        let err = provider.fetch(&ctx).await.unwrap_err();
+        match err {
+            ProviderError::Unavailable { reason } => {
+                assert_eq!(
+                    reason,
+                    "~/.claude/projects not found — is Claude Code installed?"
+                );
+                assert!(reason.ends_with('?'), "must end with a next-step hint");
+            }
+            other => panic!("expected Unavailable, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn empty_projects_directory_returns_no_sessions_literal() {
+        let home = tempfile::tempdir().unwrap();
+        let projects_dir = home.path().join(".claude").join("projects");
+        std::fs::create_dir_all(&projects_dir).unwrap();
+        // Empty directory: no .jsonl files.
+
+        let provider = ClaudeProvider::new(home.path(), CLAUDE_5H_TOKEN_LIMIT);
+        let secrets = Secrets::default();
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let ctx = FetchCtx { now, secrets: &secrets };
+
+        let err = provider.fetch(&ctx).await.unwrap_err();
+        match err {
+            ProviderError::Unavailable { reason } => {
+                assert!(
+                    reason.contains("no claude sessions found"),
+                    "expected next-step hint, got: {reason}"
+                );
+                assert!(
+                    reason.contains("run Claude Code at least once"),
+                    "must end with next-step hint, got: {reason}"
+                );
+            }
+            other => panic!("expected Unavailable, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn id_returns_claude() {
+        let home = tempfile::tempdir().unwrap();
+        let provider = ClaudeProvider::new(home.path(), CLAUDE_5H_TOKEN_LIMIT);
+        assert_eq!(provider.id(), ProviderId::Claude);
+    }
+}

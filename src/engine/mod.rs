@@ -42,9 +42,19 @@ impl Engine {
         let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
 
         if cfg.providers.claude.enabled {
-            tracing::debug!(
-                "providers.claude.enabled is true but ClaudeProvider wiring lands in Task 1b"
-            );
+            // Resolve the user's HOME for ClaudeProvider's base_path. Unavailable HOME
+            // collapses to an empty PathBuf — the adapter will then surface the
+            // UI-SPEC literal `~/.claude/projects not found — is Claude Code installed?`
+            // via the Provider::fetch error path.
+            let home = directories::BaseDirs::new()
+                .map(|d| d.home_dir().to_path_buf())
+                .unwrap_or_default();
+            providers.push(std::sync::Arc::new(
+                crate::provider::claude::ClaudeProvider::new(
+                    &home,
+                    crate::provider::claude::CLAUDE_5H_TOKEN_LIMIT,
+                ),
+            ));
         }
         if cfg.providers.codex.enabled {
             tracing::debug!("providers.codex.enabled is true but Codex adapter is Phase 2 — skipping");
