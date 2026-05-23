@@ -44,6 +44,8 @@ fn mock_panic_yields_error_row_and_claude_stays_healthy() {
         .env("XDG_CONFIG_HOME", &xdg)
         .env("AHB_DEBUG_PANIC", "adapter:mock")
         .env("NO_COLOR", "1")
+        // Bypass D-41 keyring init on backend-less hosts (CI / headless dev).
+        .env("AHB_SECRETS_MOCK", "1")
         .output()
         .expect("subprocess should run");
 

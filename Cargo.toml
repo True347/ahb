@@ -54,6 +54,34 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # dep tree silently break ratatui rendering). Phase 1 Plan 03 will use `ratatui::crossterm`
 # re-export. `clippy.toml disallowed-types` enforces this at the source level.
 
+# Phase 1 Plan 02 — OS keyring abstraction (REQ SEC-01; D-40, D-41, D-42).
+# Provenance verified 2026-05-23: `repository` field on crates.io points to
+# `github.com/open-source-cooperative/keyring-core.git` (same org as the cfg-gated
+# `*-keyring-store` companion crates below). DO NOT swap for the `keyring` v4 crate —
+# v4 is a demo/CLI shell, NOT a library (STACK.md "What NOT to use"). Phase 2 Codex +
+# Phase 3 Gemini consume this through `Entry::new("ahb", "<provider-id>")` once the
+# `*-keyring-store` companion (cfg-gated below) is registered via `set_default_store`.
+keyring-core = "1"
+
+# Phase 1 Plan 02 — Drop-time memory zero for `Secret<T>` (REQ SEC-02; D-42).
+# Provenance verified 2026-05-23: `repository` = `github.com/RustCrypto/utils`
+# (RustCrypto org, canonical pick per RESEARCH Pattern 6).
+zeroize = "1.8"
+
+# Phase 1 Plan 02 — cfg-gated `*-keyring-store` companions for `set_default_store`.
+# Each crate's `repository` was verified on crates.io 2026-05-23 to point under
+# `github.com/open-source-cooperative/*` (same org that publishes `keyring-core`).
+# The `crypto-rust` feature on the Linux backend avoids OpenSSL (STACK.md rustls-only
+# binding — keeps the binary musl-static-friendly + clean Windows build).
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus-secret-service-keyring-store = { version = "1", default-features = false, features = ["crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = "1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "1"
+
 [dev-dependencies]
 # Phase 0 — compile-time trait checks.
 static_assertions = "1"

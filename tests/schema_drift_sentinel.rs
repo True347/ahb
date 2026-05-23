@@ -57,6 +57,8 @@ fn drift_in_recent_assistants_triggers_sentinel_literal() {
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", &xdg)
         .env("NO_COLOR", "1") // strip ANSI to make the byte assertions deterministic
+        // Bypass D-41 keyring init on backend-less hosts (CI / headless dev).
+        .env("AHB_SECRETS_MOCK", "1")
         .output()
         .expect("subprocess should run");
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -97,10 +97,44 @@ pub fn compact_line_colored(
 /// `reason` is `err.to_string()` (the Display impl already enforces one-line because
 /// `ProviderError`'s `#[error(...)]` strings contain no `\n`).
 ///
+/// Plan 02 special case: `ProviderError::SchemaDrift` returns the verbatim UI-SPEC
+/// sentinel `{label}  ▒▒▒▒▒▒▒▒▒▒ ??% • Claude adapter may be out-of-date` using
+/// U+2592 (medium-shade, NOT U+2591 light-shade — UI-SPEC distinguishes). The label
+/// comes from `id_label(id)` so a future non-Claude adapter triggering `SchemaDrift`
+/// renders cleanly (WARNING #5 resolution — no hard-coded "claude").
+///
 /// `_ascii` is reserved for symmetry with `compact_line` — Phase 2 may use it.
 #[must_use]
-pub fn format_error_row(id: ProviderId, err: &ProviderError, _ascii: bool) -> String {
+pub fn format_error_row(id: ProviderId, err: &ProviderError, ascii: bool) -> String {
+    format_error_row_colored(id, err, ascii, false)
+}
+
+/// Color-aware variant. `color_on=true` paints the bar cells + `??%` `DarkGray`
+/// (Secondary role per UI-SPEC — "unknown, not critical") and the trailing phrase
+/// `Claude adapter may be out-of-date` Bold + Red (Destructive role).
+#[must_use]
+pub fn format_error_row_colored(
+    id: ProviderId,
+    err: &ProviderError,
+    _ascii: bool,
+    color_on: bool,
+) -> String {
     let label = id_label(id);
+    if let ProviderError::SchemaDrift { .. } = err {
+        // UI-SPEC LOCKED sentinel: 10× U+2592 medium-shade, " ??% ", U+2022, then phrase.
+        let bar = "\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}";
+        let pct = "??%";
+        let phrase = "Claude adapter may be out-of-date";
+        if color_on {
+            return format!(
+                "{label}  {bar} {pct} \u{2022} {phrase}",
+                bar = bar.bright_black(),
+                pct = pct.bright_black(),
+                phrase = phrase.red().bold(),
+            );
+        }
+        return format!("{label}  {bar} {pct} \u{2022} {phrase}");
+    }
     let reason = format_one_line(&err.to_string());
     format!("{label}  ERROR: {reason}")
 }

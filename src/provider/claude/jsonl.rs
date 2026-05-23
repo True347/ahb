@@ -110,6 +110,69 @@ pub fn read_assistant_entries(path: &Path) -> Vec<AssistantEntry> {
     out
 }
 
+/// Re-read up to the last `n` assistant entries from one JSONL file as raw
+/// `serde_json::Value`s. Used by `detect_drift` to distinguish "field absent" from
+/// "field present with value 0" — the typed `Usage` schema's `#[serde(default)]`
+/// flattens that distinction. This raw-Value re-parse keeps the typed schema
+/// UNCHANGED (Plan 01's `u64` summation + inline tests stay intact; WARNING #2
+/// resolution — preferred path (a)).
+///
+/// Tolerant of malformed lines (silent skip) and missing files (returns empty).
+/// Returns entries in file order — caller must call `.last()` / slice the tail
+/// to access the most-recent ones if combined across multiple files.
+#[must_use]
+pub fn read_recent_raw(path: &Path, n: usize) -> Vec<serde_json::Value> {
+    let Ok(file) = File::open(path) else {
+        return Vec::new();
+    };
+    let reader = BufReader::new(file);
+    let mut all: Vec<serde_json::Value> = Vec::new();
+    for line_res in reader.lines() {
+        let Ok(line) = line_res else { continue };
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if v.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+            all.push(v);
+        }
+    }
+    // Keep only the last n.
+    if all.len() > n {
+        let start = all.len() - n;
+        all.drain(..start);
+    }
+    all
+}
+
+/// ADP-03 drift detector. Given the most-recent assistant raw JSON entries (typically
+/// up to the last 3, per D-34), returns `Some(missing_fields)` when ≥ 2 of the entries
+/// lack the `/message/usage/cache_creation_input_tokens` JSON pointer, otherwise `None`.
+///
+/// The "≥ 2 of last 3" rule has low false-positive risk (one transient tool-only
+/// message doesn't trip the sentinel) while catching real schema renames quickly.
+/// Returns `None` if the slice has fewer than 2 entries (insufficient signal).
+#[must_use]
+pub fn detect_drift(recent_raw: &[serde_json::Value]) -> Option<Vec<String>> {
+    if recent_raw.len() < 2 {
+        return None;
+    }
+    let missing_count = recent_raw
+        .iter()
+        .filter(|v| {
+            v.pointer("/message/usage/cache_creation_input_tokens")
+                .is_none()
+        })
+        .count();
+    if missing_count >= 2 {
+        Some(vec!["cache_creation_input_tokens".to_string()])
+    } else {
+        None
+    }
+}
+
 /// Discover all `*.jsonl` files under `base/**`. Returns an empty Vec if `base` does
 /// not exist (adapter handles the missing-directory error one layer up).
 #[must_use]
@@ -207,5 +270,125 @@ mod tests {
         writeln!(&tmp).unwrap();
         let entries = read_assistant_entries(tmp.path());
         assert_eq!(entries.len(), 1);
+    }
+
+    // Plan 02 ADP-03 — detect_drift unit tests against synthetic Value fixtures.
+    // The typed `Usage` schema (`u64` with `#[serde(default)]`) is UNCHANGED by Plan 02;
+    // drift detection lives entirely in the raw-Value re-parse path. Plan 01's inline
+    // tests that assert `cache_creation_input_tokens == 41_630` continue to hold.
+
+    fn with_cache_creation() -> serde_json::Value {
+        serde_json::json!({
+            "type": "assistant",
+            "timestamp": "2026-05-23T10:00:00Z",
+            "message": {"role": "assistant", "usage": {"cache_creation_input_tokens": 41_630}}
+        })
+    }
+
+    fn without_usage_block() -> serde_json::Value {
+        serde_json::json!({
+            "type": "assistant",
+            "timestamp": "2026-05-23T11:00:00Z",
+            "message": {"role": "assistant", "model": "claude-opus-4-7"}
+        })
+    }
+
+    fn with_usage_but_no_cache_creation() -> serde_json::Value {
+        serde_json::json!({
+            "type": "assistant",
+            "timestamp": "2026-05-23T12:00:00Z",
+            "message": {"role": "assistant", "usage": {"output_tokens": 5}}
+        })
+    }
+
+    #[test]
+    fn detect_drift_returns_none_when_all_entries_have_cache_creation() {
+        let entries = vec![with_cache_creation(), with_cache_creation(), with_cache_creation()];
+        assert!(detect_drift(&entries).is_none());
+    }
+
+    #[test]
+    fn detect_drift_returns_some_when_two_of_three_lack_cache_creation_usage_block_absent() {
+        let entries = vec![
+            with_cache_creation(),
+            without_usage_block(),
+            without_usage_block(),
+        ];
+        let missing = detect_drift(&entries).expect("expected drift detection to fire");
+        assert_eq!(missing, vec!["cache_creation_input_tokens".to_string()]);
+    }
+
+    #[test]
+    fn detect_drift_returns_some_when_two_of_three_have_usage_but_no_cache_creation_field() {
+        let entries = vec![
+            with_cache_creation(),
+            with_usage_but_no_cache_creation(),
+            with_usage_but_no_cache_creation(),
+        ];
+        let missing = detect_drift(&entries).expect("expected drift detection to fire");
+        assert_eq!(missing, vec!["cache_creation_input_tokens".to_string()]);
+    }
+
+    #[test]
+    fn detect_drift_returns_none_when_only_one_entry_lacks_field() {
+        let entries = vec![without_usage_block()];
+        assert!(detect_drift(&entries).is_none(), "single entry is insufficient signal");
+    }
+
+    #[test]
+    fn detect_drift_returns_some_when_all_entries_lack_usage_block() {
+        let entries = vec![
+            without_usage_block(),
+            without_usage_block(),
+            without_usage_block(),
+        ];
+        let missing = detect_drift(&entries).expect("expected drift detection to fire");
+        assert_eq!(missing, vec!["cache_creation_input_tokens".to_string()]);
+    }
+
+    #[test]
+    fn detect_drift_returns_none_when_one_of_two_is_drifted_below_threshold() {
+        // ≥ 2 of slice — with len 2, exactly 1 missing is NOT enough to fire.
+        let entries = vec![with_cache_creation(), without_usage_block()];
+        assert!(detect_drift(&entries).is_none(), "1/2 missing is below threshold");
+    }
+
+    #[test]
+    fn read_recent_raw_returns_only_last_n_assistant_entries() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let user_line = r#"{"type":"user","timestamp":"2026-05-23T05:00:00Z","message":{"role":"user","content":"hi"},"uuid":"u-user"}"#;
+        let assistant_lines = (1..=5)
+            .map(|i| {
+                format!(
+                    r#"{{"type":"assistant","timestamp":"2026-05-23T0{i}:00:00Z","message":{{"role":"assistant","model":"claude-opus-4-7","usage":{{"cache_creation_input_tokens":{}}}}},"uuid":"u{i}"}}"#,
+                    i * 100
+                )
+            })
+            .collect::<Vec<_>>();
+        writeln!(&tmp, "{user_line}").unwrap();
+        for line in &assistant_lines {
+            writeln!(&tmp, "{line}").unwrap();
+        }
+        let recent = read_recent_raw(tmp.path(), 3);
+        assert_eq!(recent.len(), 3, "must return only the last 3 assistant entries");
+        // The 3 returned should correspond to assistant entries 3,4,5 (i.e. uuids u3,u4,u5).
+        let uuids: Vec<String> = recent
+            .iter()
+            .filter_map(|v| v.get("uuid").and_then(|u| u.as_str()).map(String::from))
+            .collect();
+        assert_eq!(uuids, vec!["u3".to_string(), "u4".to_string(), "u5".to_string()]);
+    }
+
+    #[test]
+    fn read_recent_raw_skips_non_assistant_entries() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        writeln!(&tmp, "{FIXTURE_USER_LINE}").unwrap();
+        writeln!(&tmp, "{FIXTURE_ASSISTANT_LINE}").unwrap();
+        let recent = read_recent_raw(tmp.path(), 3);
+        assert_eq!(recent.len(), 1);
+        assert_eq!(
+            recent[0].get("type").and_then(|t| t.as_str()),
+            Some("assistant")
+        );
     }
 }

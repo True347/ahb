@@ -14,7 +14,7 @@ use clap::Parser;
 use ahb::cli::{Cli, Command};
 use ahb::config::{self, LoadOutcome};
 use ahb::engine::Engine;
-use ahb::secrets::Secrets;
+use ahb::secrets::{self, InitOutcome};
 
 /// Phase 0 panic hook. Composes via `take_hook()` + `set_hook()` so Phase 1's
 /// `ratatui::run` (Plan 03) can wrap it (ratatui takes the hook AFTER we install ours
@@ -42,6 +42,14 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
+    // Plan 02 BLOCKER #1 (D-43 path-b): hidden debug-build-only fake-secret emitter.
+    // Dispatched BEFORE secrets::init() / config loading so the subprocess test can run
+    // on backend-less CI runners without needing a keyring.
+    #[cfg(debug_assertions)]
+    if cli.debug_emit_fake_secret {
+        ahb::cli::debug_emit_fake_secret_and_exit();
+    }
+
     let config_path = config::default_path()?;
     let cfg = match config::load_or_init(&config_path)? {
         LoadOutcome::Initialized(_) => {
@@ -52,8 +60,17 @@ async fn main() -> anyhow::Result<()> {
         LoadOutcome::Loaded(c) => c,
     };
 
-    // Phase 1 Secrets stub — Plan 02 will replace with `ahb::secrets::init()?`.
-    let secrets = Secrets::default();
+    // D-41 hard-error path: keyring backend unavailable → exit 2 with the verbatim
+    // UI-SPEC literal. NEVER silently fall back to a file backend (STACK.md binding).
+    let secrets = match secrets::init()? {
+        InitOutcome::Ready(s) => s,
+        InitOutcome::Unavailable => {
+            eprintln!(
+                "no secret store available on this system; set [secrets].storage = \"file\" in ~/.config/ahb/config.toml to opt into 0600 file storage"
+            );
+            std::process::exit(2);
+        }
+    };
 
     let engine = Engine::new(cfg, secrets);
 

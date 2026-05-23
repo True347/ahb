@@ -9,26 +9,20 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(clippy::pedantic)]
 
-#![allow(clippy::unwrap_used)] // tests: clippy.toml allow-unwrap-in-tests = true
+#![allow(clippy::unwrap_used, clippy::panic)] // tests: clippy.toml allow-* = true
 
 use ahb::secrets::{self, InitOutcome};
 
 #[test]
 fn init_returns_ready_or_unavailable() {
     match secrets::init() {
-        Ok(InitOutcome::Ready(_)) => {
-            // Dev machine with a working keyring backend — set_default_store registered.
-        }
-        Ok(InitOutcome::Unavailable) => {
-            // CI / backend-less runner — D-41 hard-error path taken at main.rs (not here).
-        }
+        // Either branch is acceptable: dev machines with a working backend take
+        // `Ready`; CI / headless runners take `Unavailable` (D-41 path at main.rs).
+        Ok(InitOutcome::Ready(_) | InitOutcome::Unavailable) => {}
         Err(e) => {
             // The wrapper is supposed to surface backend errors as Ok(Unavailable), never
             // as a hard anyhow::Error. If we see one, it's a regression.
-            assert!(
-                false,
-                "secrets::init() returned an unexpected anyhow::Error: {e:?}"
-            );
+            panic!("secrets::init() returned an unexpected anyhow::Error: {e:?}");
         }
     }
 }

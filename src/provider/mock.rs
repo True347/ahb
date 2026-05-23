@@ -19,6 +19,21 @@ impl Provider for MockProvider {
     }
 
     async fn fetch(&self, ctx: &FetchCtx<'_>) -> Result<ProviderState, ProviderError> {
+        // Plan 02 ADP-01 integration test injection. The `AHB_DEBUG_PANIC=adapter:mock`
+        // env var is operator-controlled; tests/panic_isolation.rs uses it to prove that
+        // a panic inside one adapter does NOT crash the process and does NOT blank
+        // healthy adapters. The scoped `#[allow(clippy::panic)]` is the only deviation
+        // from the lib.rs lint floor — see PATTERNS.md `provider/mock.rs (modified)`.
+        if std::env::var_os("AHB_DEBUG_PANIC").as_deref()
+            == Some(std::ffi::OsStr::new("adapter:mock"))
+        {
+            #[allow(clippy::panic)]
+            // intentional fault injection for ADP-01 integration test — see PATTERNS provider/mock.rs (modified)
+            {
+                panic!("AHB_DEBUG_PANIC injected");
+            }
+        }
+
         // CRITICAL: use ctx.now (the injected clock), never a wall-clock read,
         // per RESEARCH Anti-Patterns. Clock-injection contract for testability.
         let resets_at = ctx.now + jiff::Span::new().hours(2);

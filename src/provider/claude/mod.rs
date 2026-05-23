@@ -48,6 +48,21 @@ impl ClaudeProvider {
     }
 }
 
+/// Pick the JSONL file with the most-recent `modified()` timestamp. Returns `None` if
+/// `files` is empty or every stat call fails. Used by the schema-drift probe to focus
+/// on the currently-active session.
+fn pick_newest_file(files: &[PathBuf]) -> Option<PathBuf> {
+    files
+        .iter()
+        .filter_map(|p| {
+            let meta = std::fs::metadata(p).ok()?;
+            let mtime = meta.modified().ok()?;
+            Some((p.clone(), mtime))
+        })
+        .max_by_key(|(_, mtime)| *mtime)
+        .map(|(p, _)| p)
+}
+
 #[async_trait]
 impl Provider for ClaudeProvider {
     fn id(&self) -> ProviderId {
@@ -64,9 +79,24 @@ impl Provider for ClaudeProvider {
             });
         }
         let files = jsonl::discover_session_files(&self.base_path);
+
+        // ADP-03 schema-drift probe (Plan 02): re-parse the last 3 assistant entries
+        // from the most-recently-modified session file as raw `serde_json::Value`s.
+        // If ≥ 2 of them lack `/message/usage/cache_creation_input_tokens`, surface
+        // `ProviderError::SchemaDrift` so the renderer paints the UI-SPEC sentinel.
+        // Uses raw `Value` (NOT the typed `Usage` schema) to distinguish
+        // "field absent" from "field present with 0" — Plan 01's typed `u64` schema
+        // stays UNCHANGED (WARNING #2 path-a).
+        if let Some(newest) = pick_newest_file(&files) {
+            let recent = jsonl::read_recent_raw(&newest, 3);
+            if let Some(missing) = jsonl::detect_drift(&recent) {
+                return Err(ProviderError::SchemaDrift { missing });
+            }
+        }
+
         let mut merged: Vec<jsonl::AssistantEntry> = Vec::new();
-        for f in files {
-            let entries = jsonl::read_assistant_entries(&f);
+        for f in &files {
+            let entries = jsonl::read_assistant_entries(f);
             merged.extend(entries);
         }
         // Sort ascending by timestamp.

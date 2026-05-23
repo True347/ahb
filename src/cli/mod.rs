@@ -28,6 +28,14 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
     pub color: ColorMode,
 
+    /// D-43 integration tier: debug-build-only fake-secret emitter for
+    /// `tests/secret_leak_subprocess.rs`. NOT compiled into release builds —
+    /// SEC-03 covers `--json` emission paths in Phase 2 CORE-04. `hide = true`
+    /// so `--help` does NOT advertise this flag even in debug builds.
+    #[cfg(debug_assertions)]
+    #[arg(long, hide = true)]
+    pub debug_emit_fake_secret: bool,
+
     /// Optional subcommand. Default (no subcommand) prints the compact one-line view.
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -70,7 +78,10 @@ pub async fn run_compact(
                 println!("{line}");
             }
             Err(err) => {
-                let line = render_text::format_error_row(id, &err, ascii);
+                // Plan 02: SchemaDrift renders the verbatim UI-SPEC sentinel (with
+                // U+2592 cells + label via id_label(id)); other errors render the
+                // Phase 0/Plan 01 `{label}  ERROR: {reason}` row.
+                let line = render_text::format_error_row_colored(id, &err, ascii, color_on);
                 println!("{line}");
             }
         }
@@ -85,6 +96,49 @@ pub async fn run_compact(
 /// Always returns an error in Phase 1 — Plan 03 replaces with the real TUI loop.
 pub fn run_tui_stub() -> anyhow::Result<()> {
     Err(anyhow::anyhow!("AHB tui will be wired in Plan 03"))
+}
+
+/// D-43 integration tier (BLOCKER #1 path-b). Emits a one-line JSON envelope containing
+/// a `Secret<String>` whose inner value is the high-entropy fixture
+/// `deadbeefcafe1234567890abcdef`, then exits with code 0.
+///
+/// `tests/secret_leak_subprocess.rs` invokes this subprocess and asserts:
+/// (a) the literal fixture is absent from stdout, (b) no 20-char alphanumeric run is
+/// present, (c) the `[REDACTED]` marker IS present (proves the Serialize path ran).
+///
+/// `#[cfg(debug_assertions)]` so release builds (cargo-dist) literally cannot compile
+/// the function in. The companion `Cli::debug_emit_fake_secret` field on this module's
+/// `Cli` struct is also gated.
+///
+/// # Panics
+///
+/// Panics if `serde_json::to_writer` fails to serialize the redacted `Secret<String>`
+/// envelope, or if `writeln!` fails on stdout. A failure here would mean
+/// `Serialize for Secret<T>` is broken — exactly what
+/// `tests/secret_leak_subprocess.rs` is designed to surface. Test failure is the
+/// intended outcome rather than silent fall-through.
+#[cfg(debug_assertions)]
+pub fn debug_emit_fake_secret_and_exit() -> ! {
+    use std::io::Write;
+    #[derive(serde::Serialize)]
+    struct DebugEnvelope<'a> {
+        fake_secret: &'a crate::secrets::Secret<String>,
+    }
+    let s = crate::secrets::Secret::new("deadbeefcafe1234567890abcdef".to_string());
+    let envelope = DebugEnvelope { fake_secret: &s };
+    // `to_writer` directly drives the same `Serialize for Secret<T>` impl that
+    // `--json` would exercise in Phase 2 CORE-04. We intentionally bypass error
+    // handling: a JSON-emit failure here is a bug in Serialize-for-Secret and
+    // the test should fail loudly. Using `write!`+`?` would force this fn to
+    // return a Result and complicate the !-return type; instead we use a small
+    // unwrap with a scoped allow.
+    let mut stdout = std::io::stdout().lock();
+    #[allow(clippy::unwrap_used)] // debug-only fixture emitter; bug here = test failure
+    {
+        serde_json::to_writer(&mut stdout, &envelope).unwrap();
+        writeln!(stdout).unwrap();
+    }
+    std::process::exit(0);
 }
 
 #[cfg(test)]

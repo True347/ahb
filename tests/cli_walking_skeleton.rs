@@ -63,6 +63,9 @@ fn ahb_default_run_emits_one_claude_row_with_real_numbers() {
         .env("XDG_CONFIG_HOME", &xdg)
         .env_remove("APPDATA")
         .env_remove("NO_COLOR")
+        // Plan 02: bypass D-41 keyring init on backend-less hosts so Plan 01 happy
+        // path stays exercisable on CI / dev machines without dbus / Keychain.
+        .env("AHB_SECRETS_MOCK", "1")
         // assert_cmd captures stdout so by definition stdout is NOT a TTY:
         // the binary must therefore emit zero ANSI bytes (CORE-05).
         .assert()
@@ -107,6 +110,9 @@ fn ahb_ascii_mode_uses_pipe_and_hash_dash_glyphs() {
         .env("XDG_CONFIG_HOME", &xdg)
         .env_remove("APPDATA")
         .env_remove("NO_COLOR")
+        // Plan 02: bypass D-41 keyring init on backend-less hosts so Plan 01 happy
+        // path stays exercisable on CI / dev machines without dbus / Keychain.
+        .env("AHB_SECRETS_MOCK", "1")
         .arg("--ascii")
         .assert()
         .success();
@@ -139,6 +145,9 @@ fn ahb_with_all_providers_disabled_prints_empty_state() {
         .env("XDG_CONFIG_HOME", &xdg)
         .env_remove("APPDATA")
         .env_remove("NO_COLOR")
+        // Plan 02: bypass D-41 keyring init on backend-less hosts so Plan 01 happy
+        // path stays exercisable on CI / dev machines without dbus / Keychain.
+        .env("AHB_SECRETS_MOCK", "1")
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
@@ -174,6 +183,9 @@ fn ahb_with_broken_claude_config_prints_error_row_not_crash() {
         .env("XDG_CONFIG_HOME", &xdg)
         .env_remove("APPDATA")
         .env_remove("NO_COLOR")
+        // Plan 02: bypass D-41 keyring init on backend-less hosts so Plan 01 happy
+        // path stays exercisable on CI / dev machines without dbus / Keychain.
+        .env("AHB_SECRETS_MOCK", "1")
         .assert()
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
