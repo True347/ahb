@@ -37,16 +37,18 @@ User-observable artifact：在裝有 Claude Code 的機器上跑 `AHB`，看到�
 
 - **D-32 (file discovery):** `glob` crate，pattern `glob("~/.claude/projects/**/*.jsonl")`。REQ ADP-02 與 PROJECT.md 都用這條 pattern 字面表達。目錄結構只一層 `projects/<project-name>/<session-uuid>.jsonl`，glob 足夠。
 
-- **D-33 (5h rolling-window 錨點 — cluster anchor):**
+- **D-33 (5h rolling-window 錨點 — cluster anchor):** [AMENDED 2026-05-23 per RESEARCH Pitfall L1]
   1. 從所有 jsonl 收集所有 message，按 `timestamp` 排序
   2. 從最新一條往回走，找到「上一條 message 距離 > 5h」的斷點 → cluster 邊界
   3. `session_start` = 該 cluster 裡最早的 user message timestamp
   4. `reset_at` = `session_start + 5h`
-  5. cluster 內所有 assistant message 的 `message.usage.input_tokens + output_tokens` 加總、與「假定的 5h limit」比 → percent_remaining
+  5. cluster 內所有 assistant message 的 **`message.usage.cache_creation_input_tokens`** 加總、與 `CLAUDE_5H_TOKEN_LIMIT`（見 D-44）比 → percent_remaining
 
   符合 Claude Code「閒置 5h 重置」實際語意。`session_start` 取 first user message 而非 first assistant message，避免「Claude 先發初始化 prompt」的 edge case。
 
-- **D-34 (ADP-03 schema-drift sentinel trigger):** 讀最近 N=3 條 `type:"assistant"` message；若其中 ≥ 2 條的 `message.usage` 不存在、或缺 `input_tokens`/`output_tokens` 任一欄、觸發 sentinel。Sentinel 字面（UI-SPEC LOCKED）：`claude  ▒▒▒▒▒▒▒▒▒▒ ??% • Claude adapter may be out-of-date`。低 false-positive（偶發 tool-only 消息不會誤觸）、schema rename 一序 catch。
+  **為什麼是 `cache_creation_input_tokens` 而不是 `input_tokens + output_tokens`？**（ccusage issue #866）：upstream Claude Code 把 `input_tokens` / `output_tokens` 當 streaming placeholder 寫進 JSONL，~75% 是 0 或 1、不會 finalize。實測 `input_tokens` 低估 100-174×、`output_tokens` 在 Opus 上低估 10-17×（thinking tokens 完全沒寫進去）。可信欄位是 `cache_creation_input_tokens`（~0.9× ground truth，這是 Anthropic 真正 bill against 5h budget 的數字）與 `cache_read_input_tokens`（~1.1× ground truth，但 cache reads 對 budget 攤銷後成本接近 0）。Phase 1 只 sum `cache_creation_input_tokens`、`cache_read_input_tokens` 不算進 budget。README 必須註記「best-effort estimate，upstream JSONL 部分不完整」。
+
+- **D-34 (ADP-03 schema-drift sentinel trigger):** [AMENDED 2026-05-23 per D-33 update] 讀最近 N=3 條 `type:"assistant"` message；若其中 ≥ 2 條的 `message.usage` 不存在、或缺 `cache_creation_input_tokens` 欄、觸發 sentinel。Sentinel 字面（UI-SPEC LOCKED）：`claude  ▒▒▒▒▒▒▒▒▒▒ ??% • Claude adapter may be out-of-date`。低 false-positive（偶發 tool-only 消息不會誤觸）、schema rename 一序 catch。
 
 - **D-35 (hot-file truncated-trailing-line tolerance):**
   - 用 `BufReader::new(File::open(path)?).lines()` 一行一行讀
@@ -142,13 +144,15 @@ User-observable artifact：在裝有 Claude Code 的機器上跑 `AHB`，看到�
   
   雙重 assert 抓「直接洩 + 編碼後洩」兩種失誤。Test 寫一次、未來 adapter 加 secret 自動承襲守護。
 
+### Claude 5h limit constant
+
+- **D-44 (CLAUDE_5H_TOKEN_LIMIT):** [ADDED 2026-05-23 per RESEARCH] 硬編 `pub const CLAUDE_5H_TOKEN_LIMIT: u64 = 44_000;`（Pro tier 估算值，來源：tokenmix.ai 2026-05 整理 + ccusage 社群測量）。Phase 1 不開放給 config override（這條留給 Phase 2 配 plan auto-detection 時再開）。Anthropic 不公告精確數字、所以 const 旁註明「best-effort estimate; revisit quarterly」並提供修改說明。Max5 / Max20 user 跑會看到 bar 跑得比實際慢（denominator 偏小、percent_used 偏高）— 文件先告知、Phase 2 解。
+
 ### Claude's Discretion
 
 - mpsc channel buffer 大小（建議 `unbounded` 或 `bounded(64)`，三 adapter × 15s tick 不會撞 bound）
 - `EngineEvent` enum 具體型別（Refresh / TickError / Shutdown 三種起跳）
 - 預設 per-adapter timeout 全局值（建議 Claude=2s，純本機 IO；HTTP adapter Phase 3 再 raise）
-- Claude 5h limit 具體 token 數字 — phase-researcher 從 Claude Code 官方限額文件 / 社群整理挖；硬編成 const `CLAUDE_5H_TOKEN_LIMIT`，留 config override hook（Phase 1 不開放給 config）
-- `cache_read_input_tokens` 是否計入用量、per-project filter — phase-researcher 確認後在 plan 階段決定（建議：計入 `cache_creation` 但不計入 `cache_read`、依 Anthropic billing 文件對齊；per-project filter 不需要、全機器跨 project 一起算才對得上 Claude Code 的限額）
 - ratatui widget 選擇：用 `Gauge` 直接 render bar、或自己 `Paragraph` + Span 拼。Claude 選乾淨那一條
 - panic-injection 整合測試的注入方式（thread::spawn panic / 故意 unwrap fixture / 環境變數）— planner 決定
 
