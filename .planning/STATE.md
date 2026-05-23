@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-05-23T06:45:37.248Z"
-last_activity: 2026-05-23 -- Phase 01 planning complete
+last_updated: "2026-05-23T10:24:13.780Z"
+last_activity: 2026-05-23
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 8
-  percent: 20
+  completed_plans: 9
+  percent: 40
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 01 (engine-claude-tui-scaffold) — EXECUTING
-Plan: 3 of 3
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-05-23 -- Phase 01 planning complete
+Last activity: 2026-05-23
 
 Progress: [██████████] 100%
 
@@ -62,6 +62,7 @@ Progress: [██████████] 100%
 | Phase 01-engine-claude-tui-scaffold P01 | 17min | 3 tasks | 17 files |
 | Phase 1 P2 | 12min | 2 tasks | 14 files |
 | Phase 01-engine-claude-tui-scaffold P03 | 12min | 2 tasks | 12 files |
+| Phase 01-engine-claude-tui-scaffold P04 P01-04 | 22min | 4 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,11 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03: clippy.toml disallowed-types relaxed to empty (Rule 3 deviation) — type-level bans fight legitimate ratatui::crossterm re-exports; PITFALLS L2 invariant moved to dep-tree level via cargo tree
 - [Phase ?]: Plan 03: ratatui::run sync signature LOCKED (Context7-verified) — async loops bridge via tokio::task::spawn_blocking + Handle::current().block_on. ratatui::init+restore manual pair forbidden (Pitfall L2 grep gate enforces)
 - [Phase ?]: Plan 03 Task 2 checkpoint auto-approved under auto-mode — TUI-04 panic-safe restore + TUI-05 non-TTY refusal verified by automated portable-pty + assert_cmd tests
+- [Phase ?]: Plan 01-04 BL-01: clock injection extended to src/tui/widgets/; AppState.now is the single data path; tui_loop render-tick arm is the SINGLE authorized TUI wall-clock site
+- [Phase ?]: Plan 01-04 BL-02: canonical ProviderId row order Claude=0/Codex=1/Gemini=2/Mock=3 locked at the engine boundary via Engine::sort_key; Mock last (debug/fault-injection only)
+- [Phase ?]: Plan 01-04 BL-03: 5h cluster gap uses jiff::Span::total(Unit::Second) > FIVE_HOURS_SECS strict-greater; three boundary tests lock the contract (4h59m30s, exactly-5h, 5h0m30s)
+- [Phase ?]: Plan 01-04 WR-06: D-41 error path uses config::default_path().ok().map_or_else(...) for cross-OS path display; TODO(future-phase) preserves [secrets].storage = 'file' escape-hatch contract for a future plan
+- [Phase ?]: Plan 01-04 WR-08: run_tui_stub deleted from src/cli/mod.rs; grep gate at 0 hits across src/ and tests/
 
 ### Pending Todos
 
@@ -120,6 +126,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-23T06:10:52.171Z
+Last session: 2026-05-23T10:24:13.766Z
 Stopped at: Phase 1 context gathered
 Resume file: None

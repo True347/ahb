@@ -68,7 +68,7 @@ Plans:
   4. The TOML config (resolved via the `directories` crate, cross-OS) lists providers with independent enable/disable flags; un-configured providers are silently skipped (not flagged as failures); secrets are stored in OS keyring via `keyring-core` 1.0 and wrapped in a `Secret<T>` newtype whose `Debug` impl redacts the value (CI grep test confirms no plaintext credential pattern in any output).
   5. When Claude Code's JSONL schema changes and too many expected fields go missing, the Claude row renders a visible "Claude adapter may be out-of-date" sentinel instead of silently zeroing the bar.
 
-**Plans:** 3/4 plans complete
+**Plans:** 4/4 plans complete
 
 **Wave 1**
 
@@ -84,7 +84,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion — gap closure from 01-VERIFICATION.md)*
 
-- [ ] 01-04-PLAN.md — BL-01 clock-injection in TUI render + BL-02 deterministic provider row order + BL-03 5h gap boundary + WR-06 cross-OS config path + WR-08 dead-code removal [wave 4]
+- [x] 01-04-PLAN.md — BL-01 clock-injection in TUI render + BL-02 deterministic provider row order + BL-03 5h gap boundary + WR-06 cross-OS config path + WR-08 dead-code removal [wave 4]
 
 **UI hint:** yes
 
@@ -141,7 +141,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
-| 1. Engine + Claude + TUI Scaffold | 3/3 | Complete   | 2026-05-23 |
+| 1. Engine + Claude + TUI Scaffold | 4/4 | Complete   | 2026-05-23 |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
 | 4. Distribution & Release Polish | 0/TBD | Not started | - |
