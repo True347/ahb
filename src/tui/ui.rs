@@ -91,7 +91,10 @@ fn draw_rows(f: &mut Frame, body: Rect, app: &AppState) {
     let constraints: Vec<Constraint> = (0..rendered).map(|_| Constraint::Length(1)).collect();
     let row_areas = Layout::vertical(constraints).split(body);
     for (i, area) in row_areas.iter().enumerate().take(rendered) {
-        hp_row::render(*area, f.buffer_mut(), &app.rows[i], false);
+        // BL-01: plumb the AppState.now snapshot into the leaf widget. The widget
+        // MUST NOT call Timestamp::now() itself — `tests/no_walltime_in_adapter.rs`
+        // grep-rejects any such call under `src/tui/widgets/`.
+        hp_row::render(*area, f.buffer_mut(), &app.rows[i], false, &app.now);
     }
 }
 

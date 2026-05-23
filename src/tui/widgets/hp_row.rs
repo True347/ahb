@@ -36,22 +36,37 @@ const BAR_WIDTH: usize = 10;
 ///
 /// `_ascii` is reserved for symmetry with `compact_line` should a future phase reintroduce
 /// ASCII fallback in the TUI surface.
-pub fn render(area: Rect, buf: &mut Buffer, row: &RowState, _ascii: bool) {
-    let line = build_line(row);
+///
+/// `now` is the wall-clock snapshot supplied by the caller (`ui::draw` plumbs `&app.now`).
+/// BL-01 fix: this widget MUST NOT read wall clock itself — the render-tick arm in
+/// `tui_loop` is the single authorized site (enforced by
+/// `tests/no_walltime_in_adapter.rs`).
+pub fn render(
+    area: Rect,
+    buf: &mut Buffer,
+    row: &RowState,
+    _ascii: bool,
+    now: &jiff::Timestamp,
+) {
+    let line = build_line(row, now);
     Paragraph::new(line).render(area, buf);
 }
 
 /// Build the `Line` for one row (factored out so unit tests can inspect the spans).
+///
+/// `now` is forwarded to `build_ok_line` so the countdown reflects the caller-supplied
+/// wall clock (BL-01 fix). SchemaDrift / Err branches do not consume `now` but the
+/// uniform signature lets the caller pass it without per-variant branching.
 #[must_use]
-pub fn build_line(row: &RowState) -> Line<'static> {
+pub fn build_line(row: &RowState, now: &jiff::Timestamp) -> Line<'static> {
     match row {
-        RowState::Ok(state) => build_ok_line(state),
+        RowState::Ok(state) => build_ok_line(state, now),
         RowState::SchemaDrift { id } => build_schema_drift_line(*id),
         RowState::Err { id, message } => build_err_line(*id, message),
     }
 }
 
-fn build_ok_line(state: &crate::model::ProviderState) -> Line<'static> {
+fn build_ok_line(state: &crate::model::ProviderState, now: &jiff::Timestamp) -> Line<'static> {
     // Phase 1 mirrors compact_line: render only windows[0]. Empty windows is a contract
     // violation but we degrade gracefully to an empty error row rather than panic.
     if state.windows.is_empty() {
@@ -70,7 +85,7 @@ fn build_ok_line(state: &crate::model::ProviderState) -> Line<'static> {
     };
 
     let label = id_label(state.id);
-    let countdown = format_countdown(&jiff::Timestamp::now(), &w.reset.resets_at);
+    let countdown = format_countdown(now, &w.reset.resets_at);
     let pct_int = pct_int(pct);
 
     Line::from(vec![
@@ -125,8 +140,12 @@ mod tests {
     use crate::model::{HpWindow, ProviderError, ProviderId, ProviderState, ResetInfo};
     use std::borrow::Cow;
 
+    fn fixture_now() -> jiff::Timestamp {
+        "2026-05-23T12:00:00Z".parse().unwrap()
+    }
+
     fn ok_row(pct: f32) -> RowState {
-        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let now = fixture_now();
         RowState::Ok(ProviderState {
             id: ProviderId::Claude,
             windows: vec![HpWindow {
@@ -143,7 +162,7 @@ mod tests {
     #[test]
     fn schema_drift_row_uses_id_label_not_hardcoded_claude() {
         let drift = RowState::SchemaDrift { id: ProviderId::Codex };
-        let line = build_line(&drift);
+        let line = build_line(&drift, &fixture_now());
         let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(
             plain.starts_with("codex  "),
@@ -163,7 +182,7 @@ mod tests {
             id: ProviderId::Gemini,
             message: "gemini.google.com unreachable — check network".into(),
         };
-        let line = build_line(&row);
+        let line = build_line(&row, &fixture_now());
         let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(plain.starts_with("gemini  "), "label prefix wrong: {plain}");
         assert!(plain.contains("ERROR: "), "ERROR keyword missing: {plain}");
@@ -175,8 +194,9 @@ mod tests {
 
     #[test]
     fn ok_row_color_thresholds_per_ui_spec() {
+        let now = fixture_now();
         // pct ≥ 30 → Green
-        let line = build_line(&ok_row(50.0));
+        let line = build_line(&ok_row(50.0), &now);
         let bar_span = line
             .spans
             .iter()
@@ -185,7 +205,7 @@ mod tests {
         assert_eq!(bar_span.style.fg, Some(Color::Green));
 
         // 10 ≤ pct < 30 → Yellow
-        let line = build_line(&ok_row(15.0));
+        let line = build_line(&ok_row(15.0), &now);
         let bar_span = line
             .spans
             .iter()
@@ -194,7 +214,7 @@ mod tests {
         assert_eq!(bar_span.style.fg, Some(Color::Yellow));
 
         // pct < 10 → Red. 5% rounds to 1 filled cell — find that cell.
-        let line = build_line(&ok_row(5.0));
+        let line = build_line(&ok_row(5.0), &now);
         let bar_span = line
             .spans
             .iter()
@@ -205,21 +225,21 @@ mod tests {
 
     #[test]
     fn ok_row_label_uses_id_label() {
-        let line = build_line(&ok_row(60.0));
+        let line = build_line(&ok_row(60.0), &fixture_now());
         let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(plain.starts_with("claude  "), "label: {plain}");
     }
 
     #[test]
     fn build_line_for_empty_windows_degrades_gracefully() {
-        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let now = fixture_now();
         let row = RowState::Ok(ProviderState {
             id: ProviderId::Mock,
             windows: vec![],
             fetched_at: now,
             source: Cow::Borrowed("mock"),
         });
-        let line = build_line(&row);
+        let line = build_line(&row, &now);
         let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(plain.contains("ERROR:"), "empty-windows row should degrade to ERROR: {plain}");
     }

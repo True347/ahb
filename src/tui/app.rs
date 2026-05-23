@@ -32,16 +32,30 @@ pub enum RowState {
 
 /// Cached TUI state. Updated by `apply_results` once per fetch tick; consumed by
 /// `ui::draw` once per render tick.
-#[derive(Debug, Default)]
+///
+/// `now` is the snapshot of the wall clock at the most-recent render tick. It is
+/// updated by `tui_loop` ONLY; the renderer must NEVER call `jiff::Timestamp::now()`
+/// — clock-injection rule (BL-01 fix). `tests/no_walltime_in_adapter.rs` grep-rejects
+/// any `Timestamp::now` call under `src/tui/widgets/` to enforce this.
+#[derive(Debug)]
 pub struct AppState {
     pub rows: Vec<RowState>,
+    /// Snapshot of wall clock at the most-recent render tick. Updated by tui_loop
+    /// ONLY; the renderer must NEVER call jiff::Timestamp::now() — clock-injection
+    /// rule (BL-01 fix).
+    pub now: jiff::Timestamp,
 }
 
 impl AppState {
-    /// Build a fresh empty state. Equivalent to `AppState::default()`.
+    /// Build a fresh empty state seeded with the provided `now` snapshot. The TUI
+    /// `tui_loop` then keeps `now` up-to-date before each render tick (the single
+    /// authorized wall-clock site in the render path).
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(now: jiff::Timestamp) -> Self {
+        Self {
+            rows: Vec::new(),
+            now,
+        }
     }
 
     /// Replace the cached rows from one engine fetch. Phase 1 has at most 3 providers,
@@ -103,9 +117,13 @@ mod tests {
         }
     }
 
+    fn fixture_now() -> jiff::Timestamp {
+        "2026-05-23T12:00:00Z".parse().unwrap()
+    }
+
     #[test]
     fn apply_results_translates_ok_schema_drift_and_err() {
-        let mut app = AppState::new();
+        let mut app = AppState::new(fixture_now());
         let results = vec![
             (ProviderId::Claude, Ok(make_state(60.0))),
             (
@@ -144,20 +162,20 @@ mod tests {
 
     #[test]
     fn handle_event_quits_on_q() {
-        let mut app = AppState::new();
+        let mut app = AppState::new(fixture_now());
         assert!(app.handle_event(&key(KeyCode::Char('q'), KeyModifiers::NONE)));
         assert!(app.handle_event(&key(KeyCode::Char('q'), KeyModifiers::SHIFT)));
     }
 
     #[test]
     fn handle_event_quits_on_ctrl_c() {
-        let mut app = AppState::new();
+        let mut app = AppState::new(fixture_now());
         assert!(app.handle_event(&key(KeyCode::Char('c'), KeyModifiers::CONTROL)));
     }
 
     #[test]
     fn handle_event_does_not_quit_on_other_keys() {
-        let mut app = AppState::new();
+        let mut app = AppState::new(fixture_now());
         assert!(!app.handle_event(&key(KeyCode::Char('c'), KeyModifiers::NONE)));
         assert!(!app.handle_event(&key(KeyCode::Char('x'), KeyModifiers::NONE)));
         assert!(!app.handle_event(&key(KeyCode::Esc, KeyModifiers::NONE)));

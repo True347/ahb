@@ -1,9 +1,14 @@
-//! Acceptance grep: `jiff::Timestamp::now()` is forbidden under `src/provider/`.
+//! Acceptance grep: `jiff::Timestamp::now()` is forbidden under `src/provider/`
+//! AND `src/tui/widgets/`.
 //!
-//! Phase 0 contract: only `src/main.rs` (and `src/cli/mod.rs` as the main-adjacent
-//! CLI dispatcher) call wall-clock. All adapters use `ctx.now` (clock-injection).
-//! This test walks `src/provider/**/*.rs` line by line, filters out comments, and
-//! asserts no non-comment line matches `Timestamp::now`.
+//! Phase 0 contract: only `src/main.rs`, `src/cli/mod.rs::run_compact`, and
+//! `src/tui/mod.rs::tui_loop` call wall-clock. All adapters and TUI leaf widgets
+//! use injected timestamps (clock-injection rule — Phase 0 + BL-01 Plan 04 extension).
+//!
+//! Plan 04 (BL-01 fix): the scope expanded from `src/provider/` only to BOTH
+//! `src/provider/` AND `src/tui/widgets/`. The render-tick arm in `tui_loop` is the
+//! single authorized wall-clock site for the TUI render path; `AppState.now` is the
+//! data path into the leaf widget. Future agents must NOT re-narrow the scan.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,12 +26,22 @@ fn walk_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 #[test]
-fn no_timestamp_now_in_provider_subtree() {
-    let provider_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("provider");
-    let mut rs_files = Vec::new();
-    walk_rs_files(&provider_dir, &mut rs_files);
+fn no_timestamp_now_in_provider_or_tui_widgets_subtree() {
+    // BL-01 (Plan 04): scan BOTH `src/provider/` AND `src/tui/widgets/`. The
+    // `src/tui/mod.rs` callsite remains authorized (tui_loop is the canonical
+    // wall-clock site for the TUI render path) and is intentionally NOT scanned.
+    let scan_dirs: [&str; 2] = ["src/provider", "src/tui/widgets"];
 
-    assert!(!rs_files.is_empty(), "should find provider/*.rs files");
+    let mut rs_files = Vec::new();
+    for dir_rel in scan_dirs {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(dir_rel);
+        walk_rs_files(&dir, &mut rs_files);
+    }
+
+    assert!(
+        !rs_files.is_empty(),
+        "should find rs files under src/provider/ AND src/tui/widgets/"
+    );
 
     let mut offenders: Vec<String> = Vec::new();
     for path in &rs_files {
@@ -50,7 +65,7 @@ fn no_timestamp_now_in_provider_subtree() {
 
     assert!(
         offenders.is_empty(),
-        "Wall-clock injection rule violation — adapters must use ctx.now:\n{}",
+        "Wall-clock injection rule violation — adapters and TUI leaf widgets must use injected `now`:\n{}",
         offenders.join("\n")
     );
 }

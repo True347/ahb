@@ -40,6 +40,13 @@
 //! main-adjacent (the entry-point to a long-running surface), so `tui_loop` is the
 //! second authorized callsite. The `src/provider/` tree continues to be grep-free of
 //! `Timestamp::now`.
+//!
+//! Plan 04 extension (BL-01 fix): the render-tick arm in `tui_loop` is the SINGLE
+//! authorized wall-clock site in the TUI render path. The leaf renderer
+//! (`widgets::hp_row::build_ok_line`) MUST receive `now: &jiff::Timestamp` as a
+//! parameter rather than calling `jiff::Timestamp::now()` itself. `src/tui/widgets/`
+//! is now grep-forbidden (mirror of `src/provider/` rule), enforced by
+//! `tests/no_walltime_in_adapter.rs`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(clippy::pedantic)]
@@ -98,7 +105,7 @@ pub async fn run(engine: Engine) -> anyhow::Result<()> {
 /// terminal events (q/Ctrl-C → quit), a 15s fetch tick (refreshes engine), and a 1s
 /// render tick (re-draws cached state so the countdown updates).
 async fn tui_loop(terminal: &mut DefaultTerminal, engine: Engine) -> anyhow::Result<()> {
-    let mut app = app::AppState::new();
+    let mut app = app::AppState::new(jiff::Timestamp::now());
 
     // Prime the cache so the first frame is not empty. The 1s render tick fires shortly
     // after — the user sees real data immediately.
@@ -132,6 +139,11 @@ async fn tui_loop(terminal: &mut DefaultTerminal, engine: Engine) -> anyhow::Res
                 app.apply_results(results);
             }
             _ = render_tick.tick() => {
+                // BL-01: render-tick arm is the SINGLE authorized wall-clock site in
+                // the TUI render path. Update `app.now` immediately before the draw
+                // so the leaf widget (`hp_row::build_ok_line`) sees a fresh snapshot
+                // via `&app.now` rather than calling `Timestamp::now()` itself.
+                app.now = jiff::Timestamp::now();
                 terminal.draw(|f| ui::draw(f, &app))?;
             }
         }
