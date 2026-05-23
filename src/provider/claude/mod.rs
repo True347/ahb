@@ -77,8 +77,12 @@ impl Provider for ClaudeProvider {
             });
         };
         let pct = window::percent_remaining(cluster.used_tokens, self.token_limit);
+        // UI-SPEC LOCKED: row labels use the provider id (snake_case) so the multi-
+        // provider compact view aligns cleanly (UI-SPEC example shows `claude`,
+        // not `claude-5h`). The "-5h" window-suffix will reappear in Phase 2's
+        // `--detailed` mode where multiple windows per provider are rendered.
         let win = HpWindow {
-            label: Cow::Borrowed("claude-5h"),
+            label: Cow::Borrowed("claude"),
             percent_remaining: pct,
             reset: ResetInfo {
                 resets_at: cluster.reset_at,
@@ -135,7 +139,7 @@ mod tests {
         // session_start = 11:00 → reset_at = 16:00
         let expected_reset: jiff::Timestamp = "2026-05-23T16:00:00Z".parse().unwrap();
         assert_eq!(state.windows[0].reset.resets_at, expected_reset);
-        assert_eq!(state.windows[0].label, "claude-5h");
+        assert_eq!(state.windows[0].label, "claude");
     }
 
     #[tokio::test]

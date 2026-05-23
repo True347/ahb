@@ -9,41 +9,78 @@
 //! - Unicode block chars `\u{2588}` (filled) / `\u{2591}` (empty) (D-15), or `#` / `-` ASCII fallback (D-18).
 //! - Label followed by two spaces, then bar, then `pct%`, then U+2022 (or `|` in ASCII) separator.
 //! - Countdown format `Xh00m` (B-1: uses `Span::new()` fallback, not `unwrap_or_default()`).
+//!
+//! Phase 1 extensions (Task 3):
+//! - `compact_line` relaxes the Phase 0 single-window `debug_assert_eq!` to
+//!   `debug_assert!(!windows.is_empty())` and renders `windows[0]` for now.
+//! - `filled_cells` + `format_countdown` are promoted to `pub(crate) fn` so Plan 03's
+//!   TUI widget can re-import them without duplication or scoped-clippy drift.
+//! - `id_label(id)` helper plus `format_error_row(id, err, ascii)` for the
+//!   per-row error rendering (UI-SPEC LOCKED `{label}  ERROR: {reason}`).
+//! - Color application via `owo-colors` at the bar segment when `color_on` is true
+//!   (UI-SPEC thresholds: pct ≥ 30 → Green, 10 ≤ pct < 30 → Yellow, < 10 → Red;
+//!   empty cells `DarkGray`).
 
-use crate::model::ProviderState;
+use owo_colors::OwoColorize;
+
+use crate::model::{ProviderError, ProviderId, ProviderState};
 
 /// CONTEXT D-16 -- fixed bar width for snapshot stability + multi-provider alignment in compact mode.
 pub const BAR_WIDTH: usize = 10;
 
+/// Empty-state heading printed when no providers are configured / enabled (UI-SPEC).
+pub const EMPTY_STATE_HEADING: &str = "no providers configured";
+/// Empty-state body printed below the heading (UI-SPEC).
+pub const EMPTY_STATE_BODY: &str =
+    "add at least one provider to ~/.config/ahb/config.toml — see README";
+
 /// Render a compact HP-bar line through the locked `Provider` trait output (`ProviderState`).
 ///
-/// Phase 0 only renders one window; Phase 1 will extend to multi-window rendering.
+/// Phase 1: relaxed from Phase 0's `debug_assert_eq!(windows.len(), 1)` to
+/// `debug_assert!(!windows.is_empty())`. Still renders only `windows[0]`; Phase 2's
+/// `--detailed` will iterate all windows.
 ///
 /// `ascii=true` substitutes `#`/`-` for the bar cells and `|` for the U+2022 separator
 /// per D-18 (deterministic opt-in, no auto-detection).
 #[must_use]
 pub fn compact_line(state: &ProviderState, now: &jiff::Timestamp, ascii: bool) -> String {
-    debug_assert_eq!(
-        state.windows.len(),
-        1,
-        "Phase 0 mock returns exactly one window; multi-window rendering is Phase 1"
+    compact_line_colored(state, now, ascii, false)
+}
+
+/// Color-aware variant. `color_on=true` wraps the bar segments in ANSI fg color escapes
+/// per UI-SPEC thresholds (Green/Yellow/Red for filled, `DarkGray` for empty).
+#[must_use]
+pub fn compact_line_colored(
+    state: &ProviderState,
+    now: &jiff::Timestamp,
+    ascii: bool,
+    color_on: bool,
+) -> String {
+    debug_assert!(
+        !state.windows.is_empty(),
+        "ProviderState must have at least one window"
     );
     let w = &state.windows[0];
     let pct = w.percent_remaining.clamp(0.0, 100.0);
     let filled = filled_cells(pct);
 
-    let bar = if ascii {
-        format!(
-            "{}{}",
-            "#".repeat(filled),
-            "-".repeat(BAR_WIDTH - filled)
-        )
+    let (filled_glyph, empty_glyph): (&str, &str) = if ascii {
+        ("#", "-")
     } else {
-        format!(
-            "{}{}",
-            "\u{2588}".repeat(filled),
-            "\u{2591}".repeat(BAR_WIDTH - filled)
-        )
+        ("\u{2588}", "\u{2591}")
+    };
+    let filled_str = filled_glyph.repeat(filled);
+    let empty_str = empty_glyph.repeat(BAR_WIDTH - filled);
+
+    let bar = if color_on {
+        // UI-SPEC threshold: Green ≥ 30, Yellow 10..30, Red < 10. Empty cells DarkGray.
+        match pct {
+            p if p >= 30.0 => format!("{}{}", filled_str.green(), empty_str.bright_black()),
+            p if p >= 10.0 => format!("{}{}", filled_str.yellow(), empty_str.bright_black()),
+            _ => format!("{}{}", filled_str.red(), empty_str.bright_black()),
+        }
+    } else {
+        format!("{filled_str}{empty_str}")
     };
 
     let countdown = format_countdown(now, &w.reset.resets_at);
@@ -56,10 +93,56 @@ pub fn compact_line(state: &ProviderState, now: &jiff::Timestamp, ascii: bool) -
     )
 }
 
+/// Format an error row per UI-SPEC LOCKED: `{label}  ERROR: {one-line reason}`.
+/// `reason` is `err.to_string()` (the Display impl already enforces one-line because
+/// `ProviderError`'s `#[error(...)]` strings contain no `\n`).
+///
+/// `_ascii` is reserved for symmetry with `compact_line` — Phase 2 may use it.
+#[must_use]
+pub fn format_error_row(id: ProviderId, err: &ProviderError, _ascii: bool) -> String {
+    let label = id_label(id);
+    let reason = format_one_line(&err.to_string());
+    format!("{label}  ERROR: {reason}")
+}
+
+/// Sanitize a reason string into one line (collapse any newline / CR to a space).
+/// Defensive: `ProviderError`'s Display strings should already be one line.
+fn format_one_line(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_space = false;
+    for ch in s.chars() {
+        let is_ws = ch == '\n' || ch == '\r' || ch == '\t';
+        let ch = if is_ws { ' ' } else { ch };
+        if ch == ' ' {
+            if !prev_space {
+                out.push(' ');
+            }
+            prev_space = true;
+        } else {
+            out.push(ch);
+            prev_space = false;
+        }
+    }
+    out
+}
+
+/// Map `ProviderId` to its UI label (matches `ProviderId`'s `snake_case` serde repr).
+/// Used by `format_error_row` and by Plan 02's `SchemaDrift` sentinel.
+#[must_use]
+pub(crate) fn id_label(id: ProviderId) -> &'static str {
+    match id {
+        ProviderId::Claude => "claude",
+        ProviderId::Codex => "codex",
+        ProviderId::Gemini => "gemini",
+        ProviderId::Mock => "mock",
+    }
+}
+
 /// Convert a clamped `0.0..=100.0` percent into an integer in `0..=10`.
 /// Pulled out so the f32→usize cast lints can be scoped to one tiny function.
+/// Phase 1: promoted to `pub(crate)` so Plan 03's TUI widget can re-import (WARNING #3).
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
-fn filled_cells(pct: f32) -> usize {
+pub(crate) fn filled_cells(pct: f32) -> usize {
     // pct is pre-clamped 0..=100 by caller; product is 0..=BAR_WIDTH; round to nearest cell.
     (pct * BAR_WIDTH as f32 / 100.0).round() as usize
 }
@@ -77,7 +160,9 @@ fn pct_int(pct: f32) -> u32 {
 /// `Timestamp::since` defaults to a seconds-largest span; we pass `(Unit::Hour, now)`
 /// so the returned `Span` carries `hours()` + `minutes()` + `seconds()` decomposed
 /// (e.g. a 2-hour gap returns `2h 0m 0s`, not `7200s 0m 0h`).
-fn format_countdown(now: &jiff::Timestamp, target: &jiff::Timestamp) -> String {
+///
+/// Phase 1: promoted to `pub(crate)` so Plan 03's TUI widget can re-import (WARNING #3).
+pub(crate) fn format_countdown(now: &jiff::Timestamp, target: &jiff::Timestamp) -> String {
     let span = target
         .since((jiff::Unit::Hour, *now))
         .unwrap_or_else(|_| jiff::Span::new());
@@ -201,5 +286,68 @@ mod tests {
             bytes.windows(3).any(|w| w == [0xe2, 0x80, 0xa2]),
             "U+2022 bytes missing: {line}"
         );
+    }
+
+    // Phase 1: id_label + format_error_row tests
+    #[test]
+    fn id_label_returns_snake_case_provider_names() {
+        assert_eq!(id_label(ProviderId::Claude), "claude");
+        assert_eq!(id_label(ProviderId::Codex), "codex");
+        assert_eq!(id_label(ProviderId::Gemini), "gemini");
+        assert_eq!(id_label(ProviderId::Mock), "mock");
+    }
+
+    #[test]
+    fn format_error_row_uses_id_label_not_hardcoded_string() {
+        let err = ProviderError::Unavailable {
+            reason: "~/.claude/projects not found — is Claude Code installed?".into(),
+        };
+        let row = format_error_row(ProviderId::Claude, &err, false);
+        assert!(row.starts_with("claude  ERROR:"), "row: {row}");
+        assert!(
+            row.ends_with("is Claude Code installed?"),
+            "row: {row} — must end with next-step hint"
+        );
+
+        // Same fn handles other providers via id_label.
+        let row2 = format_error_row(ProviderId::Codex, &err, false);
+        assert!(row2.starts_with("codex  ERROR:"), "row: {row2}");
+    }
+
+    #[test]
+    fn format_error_row_collapses_any_embedded_whitespace_into_single_spaces() {
+        let err = ProviderError::Unavailable {
+            reason: "line1\nline2".into(),
+        };
+        let row = format_error_row(ProviderId::Claude, &err, false);
+        assert!(!row.contains('\n'), "row leaks newline: {row}");
+    }
+
+    // Phase 1: compact_line_colored emits ANSI escape bytes when color_on is true
+    #[test]
+    fn compact_line_colored_emits_ansi_when_color_on() {
+        let now: jiff::Timestamp = "2026-05-22T12:00:00Z".parse().unwrap();
+        let resets_at = now + jiff::Span::new().hours(2);
+        let state = make_state(60.0, resets_at);
+
+        let line = compact_line_colored(&state, &now, true, true);
+        assert!(line.contains("\x1b["), "colored line must contain ANSI escapes: {line:?}");
+    }
+
+    #[test]
+    fn compact_line_colored_no_ansi_when_color_off() {
+        let now: jiff::Timestamp = "2026-05-22T12:00:00Z".parse().unwrap();
+        let resets_at = now + jiff::Span::new().hours(2);
+        let state = make_state(60.0, resets_at);
+
+        let line = compact_line_colored(&state, &now, true, false);
+        assert!(!line.contains("\x1b["), "uncolored line must not contain ANSI escapes: {line:?}");
+    }
+
+    #[test]
+    fn empty_state_constants_match_ui_spec() {
+        assert_eq!(EMPTY_STATE_HEADING, "no providers configured");
+        assert!(EMPTY_STATE_BODY.contains("config.toml"));
+        assert!(EMPTY_STATE_BODY.contains("README"));
     }
 }

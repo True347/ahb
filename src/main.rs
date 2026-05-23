@@ -1,48 +1,23 @@
-//! AHB — AI HP Bar — Phase 0 binary entry point.
+//! AHB — AI HP Bar — Phase 1 binary entry point.
 //!
-//! Wires the runtime spine end-to-end:
-//!   panic-hook -> CLI parse -> `MockProvider` -> `render_text::compact_line` -> stdout.
+//! Wires the spine end-to-end:
+//!   panic-hook -> tracing init -> CLI parse -> config `load_or_init` -> Engine -> dispatch.
 //!
-//! Phase 1 (TUI) will compose `ratatui::init()`'s panic hook over the Phase 0
-//! hook installed below. The order documented in `install_phase0_panic_hook`
-//! is contractual — do not move the call site (CONTEXT D-27 + RESEARCH Pitfall 5).
+//! The first-line `install_phase0_panic_hook()` is contractual (D-27 + RESEARCH
+//! Pitfall 5 / L7). Plan 03's TUI will wrap (not replace) it via `ratatui::run`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(clippy::pedantic)]
 
 use clap::Parser;
 
-use ahb::cli::render_text;
-use ahb::provider::mock::MockProvider;
-use ahb::provider::{FetchCtx, Provider};
+use ahb::cli::{Cli, Command};
+use ahb::config::{self, LoadOutcome};
+use ahb::engine::Engine;
 use ahb::secrets::Secrets;
 
-/// AHB command-line surface. Phase 0 honors D-17 (`--color`) and D-18 (`--ascii`);
-/// `--color` is parsed but not yet applied (Phase 1 wires render coloring).
-#[derive(Parser)]
-#[command(
-    version,
-    about = "AHB — AI HP Bar — multi-CLI subscription session usage at a glance"
-)]
-struct Cli {
-    /// Force ASCII charset (uses '#' / '-' instead of the U+2588 / U+2591 blocks)
-    #[arg(long)]
-    ascii: bool,
-
-    /// Color mode (Phase 0 accepts but does not yet apply — Phase 1 wires render coloring).
-    #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
-    color: ColorMode,
-}
-
-#[derive(Copy, Clone, clap::ValueEnum)]
-enum ColorMode {
-    Auto,
-    Always,
-    Never,
-}
-
 /// Phase 0 panic hook. Composes via `take_hook()` + `set_hook()` so Phase 1's
-/// `ratatui::init()` can wrap it (ratatui takes the hook AFTER we install ours
+/// `ratatui::run` (Plan 03) can wrap it (ratatui takes the hook AFTER we install ours
 /// and chains: terminal-restore -> our stderr-print -> default). Order matters
 /// — see docs.rs/ratatui/latest/ratatui/fn.init.html (RESEARCH Pitfall 5).
 fn install_phase0_panic_hook() {
@@ -53,31 +28,37 @@ fn install_phase0_panic_hook() {
     }));
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 #[allow(clippy::default_constructed_unit_structs)]
 async fn main() -> anyhow::Result<()> {
-    // MUST be first: installs before any provider code runs so Phase 1 can wrap.
+    // MUST be first: installs before any provider code runs so Plan 03 can wrap.
     install_phase0_panic_hook();
 
-    let cli = Cli::parse();
-    // `cli.color` is intentionally accepted but unused in Phase 0; silence the
-    // unused-binding without a project-wide allow.
-    let _ = cli.color;
+    // Initialize tracing (RESEARCH Pitfall L7: panic hook uses eprintln! so no actual
+    // race, but the canonical order keeps it future-proof).
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
 
-    let secrets = Secrets::default();
-    let now = jiff::Timestamp::now();
-    let ctx = FetchCtx {
-        now,
-        secrets: &secrets,
+    let cli = Cli::parse();
+
+    let config_path = config::default_path()?;
+    let cfg = match config::load_or_init(&config_path)? {
+        LoadOutcome::Initialized(_) => {
+            // D-37: load_or_init already printed `initialized {} — enable providers and rerun`.
+            // Exit cleanly so the user can edit the freshly-written config.
+            return Ok(());
+        }
+        LoadOutcome::Loaded(c) => c,
     };
 
-    // The bar value MUST flow through the Provider trait, never a hardcoded println.
-    // This proves the Phase 0 spine end-to-end (CONTEXT specifics third bullet).
-    let mock = MockProvider;
-    let state = mock.fetch(&ctx).await
-        .map_err(|e| anyhow::anyhow!("mock provider failed: {e}"))?;
+    // Phase 1 Secrets stub — Plan 02 will replace with `ahb::secrets::init()?`.
+    let secrets = Secrets::default();
 
-    let line = render_text::compact_line(&state, &ctx.now, cli.ascii);
-    println!("{line}");
-    Ok(())
+    let engine = Engine::new(cfg, secrets);
+
+    match cli.command {
+        None => ahb::cli::run_compact(&engine, cli.ascii, cli.color).await,
+        Some(Command::Tui) => ahb::cli::run_tui_stub(),
+    }
 }
