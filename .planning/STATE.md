@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-05-23T05:34:21.674Z"
+last_updated: "2026-05-23T05:53:30.772Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 20
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 01 (engine-claude-tui-scaffold) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-23
 
-Progress: [████████░░] 75%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [████████░░] 75%
 | Phase 00-spike-spine P02 | 5m | 2 tasks | 4 files |
 | Phase 00-spike-spine P03 | 6m | 3 tasks | 6 files |
 | Phase 01-engine-claude-tui-scaffold P01 | 17min | 3 tasks | 17 files |
+| Phase 1 P2 | 12min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,11 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 01-01]: ClaudeProvider sums cache_creation_input_tokens ONLY (D-33 amended per L1; input_tokens+output_tokens are upstream-broken streaming placeholders per ccusage #866). Window label is 'claude' (provider id), not 'claude-5h' — UI-SPEC binding.
 - [Phase ?]: [Phase 01-01]: config::load_or_init returns LoadOutcome::{Initialized, Loaded} (caller decides exit); D-37 first-run path writes embedded template via include_str! and prints 'initialized {} — enable providers and rerun'.
 - [Phase ?]: [Phase 01-01]: filled_cells / format_countdown / id_label promoted to pub(crate) so Plan 03 TUI widget re-uses without duplication or scoped-clippy drift (WARNING #3 + #5 resolutions).
+- [Phase ?]: Plan 02: Secret<T> newtype (D-42) with Drop→zeroize, Debug→***, Serialize→[REDACTED], NO Deserialize, single .expose() unwrap
+- [Phase ?]: Plan 02: AHB_SECRETS_MOCK=1 debug-only test affordance lets backend-less CI runners exercise Plan 01 happy path while production D-41 hard-error remains binding
+- [Phase ?]: Plan 02: drift detector uses raw serde_json::Value re-parse (NOT typed schema widening) — preserves Plan 01 u64 Usage schema (WARNING #2 path-a)
+- [Phase ?]: Plan 02: SchemaDrift renderer uses id_label(id) (NOT hard-coded 'claude') so non-Claude adapters triggering drift render cleanly (WARNING #5)
+- [Phase ?]: Plan 02 Task 1: package legitimacy gate self-verified — all 5 crates' repository fields point to github.com/open-source-cooperative/* (keyring-core + dbus/apple/windows stores) or github.com/RustCrypto/utils (zeroize)
 
 ### Pending Todos
 
@@ -109,6 +115,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-23T05:33:57.781Z
+Last session: 2026-05-23T05:53:01.195Z
 Stopped at: Phase 1 context gathered
 Resume file: None

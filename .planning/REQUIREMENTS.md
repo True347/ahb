@@ -33,8 +33,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Secrets
 
-- [ ] **SEC-01**: 所有 provider 認證（cookie、token、session id）一律存進 OS keyring（`keyring-core` 1.0；macOS Keychain / Win Cred Manager / Linux Secret Service）
-- [ ] **SEC-02**: 內部以 `Secret<T>` newtype 包裝，`Debug` 自動 redact、`#[serde(skip)]` 防意外序列化
+- [x] **SEC-01**: 所有 provider 認證（cookie、token、session id）一律存進 OS keyring（`keyring-core` 1.0；macOS Keychain / Win Cred Manager / Linux Secret Service）
+- [x] **SEC-02**: 內部以 `Secret<T>` newtype 包裝，`Debug` 自動 redact、`#[serde(skip)]` 防意外序列化
 - [ ] **SEC-03**: `--json` / log / error message 中絕不出現原始 secret 值（CI grep 測試守住）
 - [x] **SEC-04**: 純無 secret 的 provider（如 Claude Code 純讀本地）仍走相同介面（不破壞統一 contract）
 
@@ -43,7 +43,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ADP-00**: `Provider` trait + `FetchCtx` + `ProviderState` / `ResetInfo` / `HpUnit` / `ProviderError` 統一介面，三家共用
 - [x] **ADP-01**: Adapter 失敗只影響該 provider — 不會讓整個 AHB crash 或 blank（per-adapter timeout + `Vec<Result<...>>` + cache stale fallback）
 - [x] **ADP-02**: Claude Code adapter — 從 `~/.claude/projects/**/*.jsonl` 計算 5h rolling window 用量 + reset 時間（不依賴 stats-cache.json 為 source of truth）
-- [ ] **ADP-03**: Claude adapter schema drift sentinel — 當期望欄位大量缺失時顯示「adapter may be out-of-date」警告
+- [x] **ADP-03**: Claude adapter schema drift sentinel — 當期望欄位大量缺失時顯示「adapter may be out-of-date」警告
 - [ ] **ADP-04**: Codex CLI adapter — read-only 開啟 `~/.codex/state_*.sqlite`（動態 version glob）+ `busy_timeout` + 偏好 append-only JSONL rollouts；`rate_limits: null` 視為 unknown
 - [ ] **ADP-05**: Gemini CLI adapter — **conditional on Phase 0 spike**。若 spike pass：HTTP 走 `gemini.google.com/usage`（或更安全的 local `gemini /stats` capture），refresh 最少 5min、ETag、daily ceiling、README ToS warning。若 spike fail：stub 在 v2 opt-in flag 後，README 寫明 deferred 原因。
 
@@ -114,14 +114,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-02 | Phase 1 | Complete |
 | CFG-03 | Phase 3 | Pending |
 | CFG-04 | Phase 1 | Complete |
-| SEC-01 | Phase 1 | Pending |
-| SEC-02 | Phase 1 | Pending |
+| SEC-01 | Phase 1 | Complete |
+| SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 2 | Pending |
 | SEC-04 | Phase 1 | Complete |
 | ADP-00 | Phase 0 | Complete |
 | ADP-01 | Phase 1 | Complete |
 | ADP-02 | Phase 1 | Complete |
-| ADP-03 | Phase 1 | Pending |
+| ADP-03 | Phase 1 | Complete |
 | ADP-04 | Phase 2 | Pending |
 | ADP-05 | Phase 3 | Pending (conditional on Phase 0 spike) |
 | DIST-01 | Phase 4 | Pending |
