@@ -2,7 +2,7 @@
 phase: 01-engine-claude-tui-scaffold
 reviewed: 2026-05-23T00:00:00Z
 depth: standard
-files_reviewed: 28
+files_reviewed: 30
 files_reviewed_list:
   - src/cli/mod.rs
   - src/cli/render_text.rs
@@ -25,6 +25,7 @@ files_reviewed_list:
   - src/tui/widgets/hp_row.rs
   - src/tui/widgets/mod.rs
   - tests/cli_walking_skeleton.rs
+  - tests/engine_row_order.rs
   - tests/first_run_init.rs
   - tests/keyring_init_sanity.rs
   - tests/no_walltime_in_adapter.rs
@@ -35,244 +36,166 @@ files_reviewed_list:
   - tests/tui_non_tty_refusal.rs
   - tests/tui_panic_safe_restore.rs
 findings:
-  critical: 0
-  blocker: 3
-  warning: 8
-  info: 5
-  total: 16
+  critical: 1
+  warning: 7
+  info: 6
+  total: 14
 status: issues_found
 ---
 
-# Phase 01: Code Review Report
+# Phase 01: Code Review Report (Re-review post gap-closure 01-04)
 
 **Reviewed:** 2026-05-23
 **Depth:** standard
-**Files Reviewed:** 28 (20 source + 10 tests; total 30 minus dupes)
+**Files Reviewed:** 30 (20 source + 11 tests; one source file `src/provider/mock.rs` re-read despite being out of file-scope because the fault-injection knob is reachable in release builds — flagged below)
 **Status:** issues_found
 
 ## Summary
 
-Phase 01 wires the engine spine, the Claude JSONL adapter, the TUI fixed-frame surface, and the secrets/keyring boundary end-to-end. The implementation is generally careful — clock injection is enforced via a grep test for `src/provider/`, panic isolation is verified via a real pty integration test, and secret redaction is double-asserted (unit + subprocess). However the adversarial sweep surfaced multiple correctness defects that need to ship-block:
+Gap-closure plans 01-04 successfully retired all five prior findings:
 
-1. **The TUI HP-row widget bypasses clock injection** (`hp_row.rs:73` calls `jiff::Timestamp::now()` mid-render). The grep guard in `tests/no_walltime_in_adapter.rs` only scans `src/provider/`, so this slipped past the test net — but it breaks the same testability seam the provider rule was designed to preserve.
-2. **Compact-line output is in nondeterministic order**. `fanout::refresh_all_inner` returns rows in `join_next` arrival order; `cli::run_compact` iterates them as-is. Running `AHB` repeatedly will shuffle "claude / codex / gemini" rows on every invocation, contradicting the UI-SPEC fixed-row mock and degrading the multi-provider aligned-bar promise.
-3. **The 5h cluster gap check uses hour-component comparison** (`window.rs:50-51`). Comparing `Span::get_hours() >= 5` treats a 5h 0m gap as a split (correct) but the code comment promises "first gap **> 5h**" — an off-by-one against the doc + a measurement granularity that ignores minutes/seconds.
+| Prior finding | Status | Evidence |
+|---|---|---|
+| BL-01 (TUI widget reads wall clock) | **Closed** | `tui::ui::draw` plumbs `&app.now` → `hp_row::render` → `build_ok_line`. `app.now` is refreshed inside the render-tick arm at `tui/mod.rs:146`. Grep guard `tests/no_walltime_in_adapter.rs` now scans both `src/provider/` AND `src/tui/widgets/`. Verified: `grep Timestamp::now src/tui/widgets/` is empty. |
+| BL-02 (nondeterministic row order) | **Closed** | `Engine::refresh_all` (`engine/mod.rs:89-105`) sorts via `sort_by_key(Self::sort_key)` with canonical order Claude=0, Codex=1, Gemini=2, Mock=3. `tests/engine_row_order.rs` enables claude + mock together and asserts claude (filesystem-bound, slower) lands at index 0 anyway. |
+| BL-03 (5h gap hour-component comparison) | **Closed** | `window.rs:61-67` now uses `since(prev.timestamp)` + `gap.total(Unit::Second) > FIVE_HOURS_SECS` (strict-greater). Boundary tests cover 4h59m30s (no split), exactly 5h (no split per strict-greater doc), 5h0m30s (split). |
+| WR-06 (Linux-only path in secret-store error) | **Closed** | `main.rs:78-84` resolves `config::default_path().ok()` and interpolates the cross-OS path into the error message; graceful fallback to literal "your AHB config file" if resolution fails. |
+| WR-08 (`run_tui_stub` dead code) | **Closed** | `grep run_tui_stub src/` returns no matches. Removed cleanly. |
 
-Several quality findings about silent provider-disabled behavior, hardcoded UI strings, fallback path corruption when `HOME` is unset, and inconsistent error-handling between `read_recent_raw` and `read_assistant_entries` round out the warning tier.
+No regressions in the five closed findings.
+
+The re-review surfaces one **new** critical-tier finding (CR-01: production-reachable panic injection via `AHB_DEBUG_PANIC`) plus carry-overs and incremental issues introduced by the gap-closure changes themselves:
+
+1. **CR-01 (NEW):** `AHB_DEBUG_PANIC=adapter:mock` triggers a real panic in `MockProvider::fetch` in release builds, not just debug. The flag is `#[allow(clippy::panic)]`-scoped but NOT `#[cfg(debug_assertions)]`-gated. Any user environment (CI, sandboxed runner, a parent process running `AHB`) can trigger an adapter-tier panic by setting an env var — fault-injection should not survive into shipped binaries.
+2. **WR-01..WR-05 carry-overs:** Schema-drift hardcoded "Claude" phrase, silent-skip codex/gemini, empty-HOME silent fallback, asymmetric error logging in `read_recent_raw`, full-file Vec load. None were in the gap-closure scope; documented here for the next planning cycle.
+3. **WR-08 (new shape):** The BL-01 fix introduced a subtle staleness — the first TUI frame uses `app.now` from `AppState::new(...)` at `tui/mod.rs:108`, which is sampled BEFORE the priming fetch. With a 2s default fetch timeout the very first frame's countdown can be up to 2s stale (the next render tick at +1s refreshes it). Minor.
+4. **Info items** include a `directories` qualifier-string concern, observability around `format_countdown` sub-minute truncation, an unused `EVENT_BUFFER` scaffolding constant, and the `Cluster` struct's `Option<Cluster>` swallowing of arithmetic errors.
 
 ---
 
-## Blocker Issues
+## Structural Findings (fallow)
 
-### BL-01: TUI row widget reads wall clock directly, breaking clock-injection contract
+No `<structural_findings>` block was provided to this re-review. The grep-style structural checks were performed in-band as part of the standard-depth narrative sweep (see CR-01 reachability check and WR-04 grep below).
 
-**File:** `src/tui/widgets/hp_row.rs:73`
+---
+
+## Narrative Findings (AI reviewer)
+
+## Blocker / Critical Issues
+
+### CR-01: `AHB_DEBUG_PANIC=adapter:mock` triggers a real panic in production release builds
+
+**File:** `src/provider/mock.rs:27-35`
+**Severity:** BLOCKER (security / robustness)
 **Issue:**
 ```rust
-let countdown = format_countdown(&jiff::Timestamp::now(), &w.reset.resets_at);
-```
-`build_ok_line` is invoked from `ui::draw` on every 1s render tick. The clock-injection rule (`provider/mod.rs:24` docstring, `tests/no_walltime_in_adapter.rs`) was specifically designed so that adapter + UI layers can be tested with a frozen clock. The render-side `Timestamp::now()` call:
-
-1. Defeats the only structural seam `ProviderState` provides for testing render output (`fetched_at` is set per-fetch but the countdown is recomputed from wall clock).
-2. Reads wall clock per render tick (1Hz) rather than per fetch tick (15s) — causes the countdown to update without re-fetching, which is the intended behavior for D-31 BUT couples the renderer to a non-injectable singleton.
-3. Is not covered by the `no_walltime_in_adapter.rs` grep because that walker is scoped to `src/provider/`. The TUI layer escapes the guard.
-
-The `src/tui/mod.rs` module doc explicitly says "TUI is structurally main-adjacent (the entry-point to a long-running surface), so `tui_loop` is the second authorized callsite" — `tui_loop` is fine, but `hp_row::build_ok_line` is a leaf render fn that should receive `now` from its caller (carry it down through `ui::draw(f, &app, now)` or store it on `AppState`).
-
-**Fix:**
-```rust
-// src/tui/app.rs
-pub struct AppState {
-    pub rows: Vec<RowState>,
-    pub now: jiff::Timestamp,           // <-- add
-}
-
-// src/tui/mod.rs tui_loop — set on every fetch tick AND every render tick:
-_ = render_tick.tick() => {
-    app.now = jiff::Timestamp::now();   // single authorized wall-clock site
-    terminal.draw(|f| ui::draw(f, &app))?;
-}
-
-// src/tui/widgets/hp_row.rs build_ok_line — take now from caller:
-fn build_ok_line(state: &ProviderState, now: &jiff::Timestamp) -> Line<'static> {
-    ...
-    let countdown = format_countdown(now, &w.reset.resets_at);
-    ...
-}
-```
-
-Then extend `tests/no_walltime_in_adapter.rs` (or add a sibling) to scan `src/tui/widgets/` so this regression cannot reappear.
-
----
-
-### BL-02: Compact-line provider rows are emitted in nondeterministic order
-
-**File:** `src/engine/fanout.rs:67-99`, `src/cli/mod.rs:74-87`
-**Issue:** `fanout::refresh_all_inner` collects results via `set.join_next_with_id().await` in arrival order — fast adapters land first, slow adapters last. The module doc admits this:
-> "returns a `Vec<(ProviderId, Result<...>)>` whose order matches `join_next` arrival (NOT input order — Phase 0's contract is unordered, callers must look up by id)."
-
-But `cli::run_compact` iterates the returned Vec without resorting:
-```rust
-for (id, result) in results {
-    match result { ... println!(...) }
-}
-```
-
-Concrete consequence: a user with all three providers enabled will see rows in random order between invocations. With Claude reading local JSONL (fast) and Codex/Gemini still stubs (no fetch), Phase 1 hides this, but the moment Phase 2/3 lands the rows will jitter. This contradicts the UI-SPEC LOCKED ordering shown in the mockup ("claude / codex / gemini") and breaks visual alignment between adjacent runs (a regression the user will notice immediately — "why did the order change?").
-
-The TUI surface inherits the same bug via `AppState::apply_results` (`tui/app.rs:53-63`) which preserves arrival order on every fetch tick — so on each 15s tick the row order can shuffle.
-
-**Fix:** Sort results by `ProviderId` discriminant order (or by config-declared order) at the engine boundary, OR sort at the CLI/TUI consumer. Simplest is at the engine — one canonical order, both front-ends benefit:
-```rust
-// src/engine/mod.rs refresh_all
-pub async fn refresh_all(&self, now: jiff::Timestamp)
-    -> Vec<(ProviderId, Result<ProviderState, ProviderError>)>
+if std::env::var_os("AHB_DEBUG_PANIC").as_deref()
+    == Some(std::ffi::OsStr::new("adapter:mock"))
 {
-    let mut results = fanout::refresh_all_inner(...).await;
-    results.sort_by_key(|(id, _)| Self::sort_key(*id));  // canonical order
-    results
-}
-
-fn sort_key(id: ProviderId) -> u8 {
-    match id {
-        ProviderId::Claude => 0,
-        ProviderId::Codex => 1,
-        ProviderId::Gemini => 2,
-        ProviderId::Mock => 3,
+    #[allow(clippy::panic)]
+    {
+        panic!("AHB_DEBUG_PANIC injected");
     }
 }
 ```
 
-Add a test asserting that `refresh_all` returns rows in this fixed order regardless of which adapter finished first (use `SlowProvider` + `OkProvider` mix as in `fanout::tests`).
+The block is `#[allow(clippy::panic)]`-scoped but NOT `#[cfg(debug_assertions)]`-gated. Compare to the sibling fault-injection knob `cli::debug_emit_fake_secret_and_exit` (`cli/mod.rs:113`) and the secrets `AHB_SECRETS_MOCK=1` affordance (`secrets.rs:115`), both of which ARE `#[cfg(debug_assertions)]`-gated and therefore literally cannot compile into a `cargo-dist` release artifact.
 
----
+Concrete consequences in a release-built `ahb` binary:
 
-### BL-03: Cluster gap detection compares only the hour component; doc/code disagreement
+1. **User-reachable adapter panic.** A user enables `[providers.mock] enabled = true` (the "power-user knob" per `config.rs:46-50`), inherits `AHB_DEBUG_PANIC=adapter:mock` from a parent shell or systemd unit, and runs `AHB` — the mock adapter panics every fetch. Pitfall L4's `JoinSet::join_next_with_id()` recovery (`fanout.rs:67-99`) catches this and renders `mock  ERROR: adapter panicked: Mock` instead of crashing the binary; however,
+2. **Repeated panics** spam the `tracing::error!` log at `fanout.rs:77` once per fetch tick (every 15s in TUI mode), and the Phase 0 panic hook (`main.rs:25-28`) writes `ahb panicked: ...` to stderr on every adapter panic — `tail -F` on the user's log file fills with red noise.
+3. **Test infrastructure leak.** `tests/panic_isolation.rs:45` and `tests/tui_panic_safe_restore.rs:62` are the only intentional callers. The flag has no documented production purpose. Shipping it is a "test-only knob that escaped into the release binary" anti-pattern — exactly the failure the `--debug-emit-fake-secret` and `AHB_SECRETS_MOCK` `#[cfg(debug_assertions)]` gating was designed to prevent.
 
-**File:** `src/provider/claude/window.rs:46-55`
-**Issue:**
+The `PATTERNS.md provider/mock.rs (modified)` comment cites integration-test usage, but does NOT say production users must be able to trigger this — and the comment is not a substitute for compile-time gating.
+
+**Fix:**
 ```rust
-let Ok(gap) = curr.timestamp.since((jiff::Unit::Hour, prev.timestamp)) else {
-    continue;
-};
-let gap_hours = gap.get_hours();
-if gap_hours >= 5 {
-    start_idx = i;
-    break;
+// src/provider/mock.rs
+async fn fetch(&self, ctx: &FetchCtx<'_>) -> Result<ProviderState, ProviderError> {
+    #[cfg(debug_assertions)]
+    if std::env::var_os("AHB_DEBUG_PANIC").as_deref()
+        == Some(std::ffi::OsStr::new("adapter:mock"))
+    {
+        #[allow(clippy::panic)]
+        {
+            panic!("AHB_DEBUG_PANIC injected");
+        }
+    }
+    // ... rest unchanged
 }
 ```
 
-Two problems:
-
-1. **Code says `>= 5`, comment + module doc say `> 5h`**. Module doc (`window.rs:6`): *"find the first gap > 5 h"*. A 5h 0m 0s gap currently triggers a split; per the doc, only gaps *strictly greater than* 5h should. Tighter: a 5h 0m 1s gap is what the doc author probably meant. The 5-vs->5 distinction matters because Claude's session window is exactly 5h — a session that ends exactly 5h after start is a boundary case, not a clean separator.
-
-2. **`get_hours()` is hour-component only, not total hours**. With `since((Unit::Hour, prev))`, the returned `Span` decomposes as `H hours + M minutes + S seconds` (jiff's largest-unit semantics). So a gap of 4h 59m 59s has `get_hours() == 4` (correctly under threshold) but a gap of 5h 0m 1s also has `get_hours() == 5` (correctly above threshold). The bug surfaces near the exact 5h boundary: a 5h 0m 0s gap reports `get_hours() == 5` and triggers the split, but a 4h 59m 30s gap reports `get_hours() == 4` and does NOT split — a 30-second swing across the integer-hour boundary changes cluster membership by a full session. The test fixtures use hour-aligned timestamps so this isn't caught.
-
-**Fix:** Convert the gap to a total-seconds (or total-minutes) scalar for comparison, and align the operator with the doc:
-```rust
-// jiff::Span.total(Unit::Second) is the rigorous comparison.
-let Ok(gap) = curr.timestamp.since(prev.timestamp) else { continue };
-let Ok(gap_secs) = gap.total(jiff::Unit::Second) else { continue };
-const FIVE_HOURS_SECS: f64 = 5.0 * 3600.0;
-if gap_secs > FIVE_HOURS_SECS {           // strict-greater matches the doc
-    start_idx = i;
-    break;
-}
-```
-
-Add a unit test with a 4h 59m 30s gap (should NOT split) and a 5h 0m 30s gap (should split) to lock the boundary.
+This matches the gating style of `secrets::init()` at `secrets.rs:115` and `Cli::debug_emit_fake_secret` at `cli/mod.rs:37`. Both `tests/panic_isolation.rs` and `tests/tui_panic_safe_restore.rs` compile against the debug binary (cargo's test target uses dev profile by default), so the gate keeps the tests working while removing the release-binary attack surface.
 
 ---
 
 ## Warnings
 
-### WR-01: SchemaDrift sentinel hard-codes "Claude adapter may be out-of-date" for all providers
+### WR-01: SchemaDrift sentinel hard-codes "Claude adapter may be out-of-date" for all providers (carry-over)
 
-**File:** `src/cli/render_text.rs:127`, `src/tui/widgets/hp_row.rs:99`
-**Issue:** Both renderers paint the literal phrase `Claude adapter may be out-of-date` regardless of which provider's adapter drifted. The `id_label(id)` resolution (WARNING #5 in plan notes) was applied to the row PREFIX but not to the trailing phrase. If Phase 2's Codex adapter ever emits `ProviderError::SchemaDrift`, the row will read:
+**File:** `src/cli/render_text.rs:127`, `src/tui/widgets/hp_row.rs:114`
+**Issue:** Carry-over from prior 01-REVIEW (not in gap-closure scope). The `id_label(id)` resolution applied to the row prefix but NOT to the trailing phrase. When Phase 2's Codex adapter (or anyone else) emits `ProviderError::SchemaDrift`, the row reads:
+
 ```
 codex  ▒▒▒▒▒▒▒▒▒▒ ??% • Claude adapter may be out-of-date
 ```
-which is misleading. The current code path only constructs `SchemaDrift` from Claude (`provider/claude/mod.rs:93`), so it's latent, but the contract isn't enforced by the type system.
 
-**Fix:** Either (a) parametrize the phrase by `id_label(id)`:
+— misleading because the literal "Claude" is now structurally wrong. `ProviderError::SchemaDrift` is constructed today only in `provider/claude/mod.rs:93`, so the bug is latent; but the contract isn't enforced by the type system.
+
+**Fix:** Parametrize the phrase by `id_label(id)`:
 ```rust
 let phrase = format!("{} adapter may be out-of-date", id_label(id));
 ```
-or (b) document that `SchemaDrift` is only emittable by the Claude adapter and add a compile-time assertion (e.g., a sealed trait or a `#[doc(hidden)]` constructor).
+
+Apply the same change in `tui/widgets/hp_row.rs:114`. Update the byte-exact `SENTINEL` in `tests/schema_drift_sentinel.rs:15` to match (the test already uses `claude  ` so the constant just becomes `format!`-derived).
 
 ---
 
-### WR-02: Enabled-but-unimplemented providers (codex, gemini) silently disappear
+### WR-02: Enabled-but-unimplemented codex/gemini providers silently disappear (carry-over)
 
 **File:** `src/engine/mod.rs:59-66`
-**Issue:**
+**Issue:** Carry-over.
 ```rust
 if cfg.providers.codex.enabled {
     tracing::debug!("providers.codex.enabled is true but Codex adapter is Phase 2 — skipping");
 }
 if cfg.providers.gemini.enabled {
-    tracing::debug!("providers.gemini.enabled is true but Gemini adapter is Phase 3 — skipping");
+    tracing::debug!(...);
 }
 ```
 
-`tracing::debug!` is suppressed at default `EnvFilter` levels. A user who follows the README, enables `[providers.codex] enabled = true`, and runs `AHB` sees ZERO codex output — neither row, nor error, nor warning. They can't tell whether their config is malformed, the adapter crashed, or codex isn't implemented yet.
+`tracing::debug!` is suppressed at default `EnvFilter` levels. A user who enables `[providers.codex] enabled = true` and runs `AHB` sees NO codex output, NO error, NO warning. They cannot distinguish "my config is wrong" from "the adapter crashed" from "AHB hasn't implemented codex yet."
 
-**Fix:** Render an explicit "not yet implemented" error row so the user sees that their config WAS read and the gap is in AHB, not their setup:
-```rust
-if cfg.providers.codex.enabled {
-    // Push a stub provider that always returns Unavailable with the canonical reason.
-    providers.push(Arc::new(NotImplementedProvider::new(
-        ProviderId::Codex,
-        "codex adapter not yet implemented (Phase 2)",
-    )));
-}
-```
-
-Alternatively, escalate the log to `tracing::warn!` so it surfaces at default filter level AND adjust the docs to say "set `RUST_LOG=ahb=warn` to see skipped providers."
+**Fix:** Either escalate to `tracing::warn!` (visible at default level) AND surface a one-time stderr notice, or push a stub `NotImplementedProvider` that always returns `Unavailable { reason: "codex adapter not yet implemented (Phase 2)" }` so the user sees an `codex  ERROR:` row.
 
 ---
 
-### WR-03: Empty-or-unset HOME on Linux silently falls back to CWD
+### WR-03: Empty-or-unset HOME on Linux silently falls back to CWD for ClaudeProvider (carry-over)
 
 **File:** `src/engine/mod.rs:49-58`
-**Issue:**
+**Issue:** Carry-over.
 ```rust
 let home = directories::BaseDirs::new()
     .map(|d| d.home_dir().to_path_buf())
-    .unwrap_or_default();   // <-- PathBuf::new() = ""
+    .unwrap_or_default();   // PathBuf::new() = empty
 providers.push(... ClaudeProvider::new(&home, ...));
 ```
 
-When `BaseDirs::new()` returns `None` (HOME unset on Linux, or rare locked-down environments), `unwrap_or_default()` yields an empty `PathBuf`. `ClaudeProvider::new` then joins it: `"".join(".claude").join("projects") == ".claude/projects"` — a relative path resolved against CWD at fetch time. If the user's CWD happens to be their real home, the adapter would read REAL session data even though config resolution failed. More likely it returns `Unavailable`, but the failure mode is wrong (silent vs. explicit).
+When `BaseDirs::new()` returns `None` (HOME unset, locked-down env), `unwrap_or_default()` yields an empty `PathBuf`. `ClaudeProvider::new` then constructs `base_path = "".join(".claude").join("projects")` — a RELATIVE path resolved against CWD at fetch time. If CWD happens to be the user's real home, the adapter would read real session data even though config resolution silently failed.
 
-**Fix:** Treat the missing-home case as an explicit error row rather than silently using `PathBuf::new()`:
-```rust
-match directories::BaseDirs::new() {
-    Some(d) => providers.push(Arc::new(ClaudeProvider::new(d.home_dir(), CLAUDE_5H_TOKEN_LIMIT))),
-    None => {
-        // Push a stub adapter that always returns Unavailable with a specific reason.
-        // Or refuse engine construction with an anyhow::Error.
-        tracing::warn!("could not resolve home dir; claude adapter disabled");
-    }
-}
-```
+Note the symmetric path in `main.rs:53` for config resolution DOES propagate the error via `?`. Only the Claude adapter's base path swallows the failure.
+
+**Fix:** Either fail closed (return `Err` from `Engine::new` when HOME is unavailable) or push a stub provider that returns `Unavailable { reason: "could not resolve home dir" }`. Do not silently degrade to a relative path.
 
 ---
 
-### WR-04: `read_recent_raw` and `read_assistant_entries` have inconsistent error handling
+### WR-04: `read_recent_raw` and `read_assistant_entries` have asymmetric error handling (carry-over)
 
 **File:** `src/provider/claude/jsonl.rs:124-148` vs `:71-111`
-**Issue:** `read_assistant_entries` warns on mid-file IO errors and parse failures (`tracing::warn!`). `read_recent_raw` silently discards them all:
-```rust
-let Ok(line) = line_res else { continue };
-...
-let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
-    continue;
-};
-```
+**Issue:** Carry-over. The two functions read the SAME files. `read_assistant_entries` emits `tracing::warn!` on file-open errors and mid-file parse errors; `read_recent_raw` silently swallows ALL errors via `let Ok(...) = ... else { return / continue }`. The drift-detector path therefore has zero observability — a permission error on the newest file produces drift = `None` indistinguishable from "no drift."
 
-These two functions read the SAME file (the most-recent session), so a malformed line that triggers a warning via the typed reader will produce zero observability through the raw-Value reader. That makes the drift detector silently disagree with the typed parser. Worse, `read_recent_raw` also doesn't `tracing::warn!` on file-open failure, while `read_assistant_entries` does — so a permission-denied error on the newest file would log via one path and not the other.
+Verified persistence with grep: `grep -n "warn" src/provider/claude/jsonl.rs` shows three `tracing::warn!` calls — all in `read_assistant_entries` + `discover_session_files`, none in `read_recent_raw`.
 
 **Fix:** Mirror the logging in `read_recent_raw`:
 ```rust
@@ -283,76 +206,59 @@ let file = match File::open(path) {
         return Vec::new();
     }
 };
-// ... and inside the loop, warn on Err(line_res) like read_assistant_entries does.
+// inside the loop, warn on Err(line_res) and parse failure too.
 ```
 
 ---
 
-### WR-05: `read_recent_raw` loads entire file before truncating to last N
+### WR-05: `read_recent_raw` loads entire file before truncating to last N (carry-over)
 
 **File:** `src/provider/claude/jsonl.rs:124-148`
-**Issue:**
+**Issue:** Carry-over (performance — flagged because it compounds with WR-04 schema-drift unobservability on long sessions).
+
 ```rust
 let mut all: Vec<serde_json::Value> = Vec::new();
-for line_res in reader.lines() {
-    ...
-    all.push(v);
-}
-if all.len() > n {
-    let start = all.len() - n;
-    all.drain(..start);
-}
+for line_res in reader.lines() { ... all.push(v); }
+if all.len() > n { all.drain(..(all.len() - n)); }
 ```
 
-Reads the entire file into memory, parses every line as `serde_json::Value`, then discards all but the last `n`. For a long-running Claude session JSONL file (some users have thousands of assistant messages per project), this allocates and parses ~N× more than needed every fetch tick (every 15s in TUI mode).
+Parses every line as `serde_json::Value`, then discards all but the last `n`. For a long-running Claude session (thousands of assistant messages), every fetch tick (every 15s in TUI mode) re-parses the entire file. The schema-drift detector only needs the last 3.
 
-This is in the v1-out-of-scope "performance" tier per the review charter, BUT the contract issue is real: if the schema-drift detector runs every tick, the memory pressure compounds. At minimum, document this; ideally use a ring buffer or backward-read.
-
-**Fix:** Use a fixed-size ring buffer to hold the last N entries while streaming forward:
-```rust
-let mut ring: std::collections::VecDeque<serde_json::Value> = VecDeque::with_capacity(n);
-for line_res in reader.lines() {
-    ...
-    if v.get("type").and_then(|t| t.as_str()) == Some("assistant") {
-        if ring.len() == n { ring.pop_front(); }
-        ring.push_back(v);
-    }
-}
-ring.into_iter().collect()
-```
+**Fix:** Use a fixed-size `VecDeque<Value>` ring buffer or read backward. Performance is technically out-of-v1-scope per the review charter, but the rolling 15s tick lifts this past "irrelevant micro-allocation" into "noticeable IO + parse load."
 
 ---
 
-### WR-06: Configuration path in error message is hardcoded to Linux convention
+### WR-06: `[secrets].storage = "file"` referenced in error message but not implemented in Config
 
-**File:** `src/main.rs:69`
-**Issue:**
-```rust
-eprintln!(
-    "no secret store available on this system; set [secrets].storage = \"file\" in ~/.config/ahb/config.toml to opt into 0600 file storage"
-);
+**File:** `src/main.rs:73-84`, `src/config.rs:53-57`
+**Issue:** The error message at `main.rs:83` instructs the user to set `[secrets].storage = "file"` in their config to opt into 0600 file storage:
+```
+no secret store available on this system; set [secrets].storage = "file" in {cfg_path_display} to opt into 0600 file storage
 ```
 
-On macOS the path is `~/Library/Application Support/ahb/config.toml`; on Windows it's `%APPDATA%\ahb\config.toml`. The error message tells the user to edit a path that doesn't exist on their OS — they'll create a Linux-style file that the binary will never read.
+But the `Config` struct (`config.rs:53-57`) has NO `[secrets]` field, and `KNOWN_PROVIDER_KEYS` at `config.rs:26` does not include `secrets`. A user who follows this instruction sees their `[secrets]` key emit `tracing::warn!("unrecognized config key 'secrets'")` (visible if `RUST_LOG` is set) and the binary exits 2 anyway because `secrets::init()` still cannot find a backend.
 
-Note also: `[secrets].storage = "file"` is documented here but the `Config` struct in `src/config.rs:53-57` has NO `[secrets]` section. The error suggests a fix that the code doesn't support.
-
-**Fix:** Use the resolved config path:
-```rust
-let cfg_path = config::default_path().ok();
-eprintln!(
-    "no secret store available on this system; set [secrets].storage = \"file\" in {} to opt into 0600 file storage",
-    cfg_path.as_ref().map_or_else(|| "your AHB config file".to_string(), |p| p.display().to_string()),
-);
+`main.rs:69-73` acknowledges this:
 ```
-And EITHER add the `[secrets]` section to `Config`, OR rewrite the message to point at the documented (but not-yet-implemented) escape hatch.
+// TODO(future-phase): the [secrets].storage = "file" escape-hatch is
+// documented intent but not yet wired in Config.
+```
+
+Acknowledged ≠ fixed. The user-facing copy promises a fix that doesn't exist.
+
+**Fix:** Either (a) implement the escape hatch (add `[secrets]` section to `Config`, wire `secrets::init()` to honor `storage = "file"` with a TOML-backed 0600 file fallback), OR (b) rewrite the message to remove the false promise:
+```
+no secret store available on this system; ahb requires an OS keyring (libsecret/Keychain/CredMan). See README for headless-Linux setup.
+```
+
+Option (b) is the lower-risk patch for this phase.
 
 ---
 
-### WR-07: `tui::ui::draw` uses `Constraint::Min(rows_len)` which can starve other chunks
+### WR-07: `tui::ui::draw` Constraint::Min(rows_len) can starve the quit-hint area (carry-over)
 
 **File:** `src/tui/ui.rs:57-64`
-**Issue:**
+**Issue:** Carry-over (unchanged since prior review).
 ```rust
 let rows_len = u16::try_from(app.rows.len().max(1)).unwrap_or(1);
 let [_top_pad, body, _footer_pad, hint_area] = Layout::vertical([
@@ -363,86 +269,119 @@ let [_top_pad, body, _footer_pad, hint_area] = Layout::vertical([
 ]).areas(inner_area);
 ```
 
-`Constraint::Min(rows_len)` says "the body must be AT LEAST rows_len rows tall". If `inner_area.height = 5` and `app.rows.len() = 4`, `rows_len = 4`. The required total is `1 + 4 + 1 + 1 = 7`, but only 5 is available. ratatui's solver will distort (either skip the hint or compress the pads); the early-return at `inner_area.height < 4` only catches the truly-tiny terminal.
+`Min(rows_len)` says "body must be AT LEAST rows_len rows tall." With 4 enabled providers and a 7-row inner area, required is `1+4+1+1=7` — fits. With 6 enabled providers (Claude + Codex + Gemini + Mock + 2 future) and a 7-row inner area, required is `1+6+1+1=9` — body wins the contention and the quit hint silently disappears. The early-return at `ui.rs:51` only catches `inner_area.height < 4`.
 
-This is benign for ≤3 providers but the user can enable mock + claude + codex + gemini (4 rows) on a small terminal and the quit hint disappears.
+This was acknowledged in the prior review and not addressed in gap-closure. Worth tracking because Phase 2/3 will plausibly add a 4th provider.
 
-**Fix:** Use `Constraint::Min(1)` for the body (let it absorb whatever's left) OR clamp `rows_len` against `inner_area.height.saturating_sub(3)`:
+**Fix:**
 ```rust
-let max_body = inner_area.height.saturating_sub(3);  // reserve 1+1+1 for pads + hint
+let max_body = inner_area.height.saturating_sub(3);  // reserve top_pad + footer_pad + hint
 let rows_len = u16::try_from(app.rows.len()).unwrap_or(0).min(max_body).max(1);
 ```
 
 ---
 
-### WR-08: `run_tui_stub` is dead code
-
-**File:** `src/cli/mod.rs:97-99`
-**Issue:** `pub fn run_tui_stub() -> anyhow::Result<()>` is defined and exported but main.rs dispatches `Some(Command::Tui) => ahb::tui::run(engine).await` — the stub is never called. Dead public API surface that confuses readers.
-
-**Fix:** Delete `run_tui_stub` (it was a Phase 0 scaffold; Plan 03 replaced it with `tui::run`).
-
----
-
 ## Info
 
-### IN-01: `pick_newest_file` clones path on every iteration
+### IN-01: `AppState::new(Timestamp::now())` seed is stale by the duration of the prime fetch (BL-01 fix side effect)
 
-**File:** `src/provider/claude/mod.rs:54-64`
-**Issue:** `filter_map(|p| { ... Some((p.clone(), mtime)) })` clones every PathBuf, then `.max_by_key` consumes them. For a session directory with hundreds of files this is wasteful. Use indices instead:
+**File:** `src/tui/mod.rs:108-114`
+**Issue:** The BL-01 fix introduced an `app.now` field and authorizes ONLY the render-tick arm to update it (`tui/mod.rs:146`). However, `tui_loop`'s initial sequence is:
 ```rust
-files.iter()
-    .filter_map(|p| std::fs::metadata(p).ok()?.modified().ok().map(|m| (p, m)))
-    .max_by_key(|(_, m)| *m)
-    .map(|(p, _)| p.clone())
+let mut app = app::AppState::new(jiff::Timestamp::now());     // T0
+let results = engine.refresh_all(jiff::Timestamp::now()).await; // T1 (T0 + up to 2s timeout)
+app.apply_results(results);
+terminal.draw(|f| ui::draw(f, &app))?;                          // uses app.now == T0
+```
+
+The first frame draws with `app.now = T0`, but the wall clock at draw time is `T1 ≥ T0`. The countdown is therefore stale by up to the per-provider timeout (default 2s, per `DEFAULT_PER_PROVIDER_TIMEOUT`). The next render tick at +1s refreshes `app.now`, so the user only sees this for ~1s.
+
+Minor — but the BL-01 fix's docstring promises "the render-tick arm is the SINGLE authorized wall-clock site in the TUI render path," and this first-frame draw violates that letter (the wall clock used IS the render path, just snapshotted earlier).
+
+**Fix:** Refresh `app.now` immediately before the prime draw:
+```rust
+let mut app = app::AppState::new(jiff::Timestamp::now());
+let results = engine.refresh_all(jiff::Timestamp::now()).await;
+app.apply_results(results);
+app.now = jiff::Timestamp::now();   // <-- add: keep the first frame fresh
+terminal.draw(|f| ui::draw(f, &app))?;
+```
+
+Or fold the prime into a manual "fire one fetch_tick early" so the existing render-tick arm handles it.
+
+---
+
+### IN-02: `cli::run_compact` reuses one `now` snapshot for both fetch and render (countdown drift)
+
+**File:** `src/cli/mod.rs:66-79`
+**Issue:** `run_compact` snapshots `now` once at line 66, passes it to `engine.refresh_all(now)`, then re-uses the SAME `now` for each `compact_line_colored(&state, &now, ...)` countdown. Per-provider fetch can take up to 2s (default timeout), so the printed countdown is stale by 0-2s relative to the actual wall clock at print time.
+
+For a CLI one-shot invocation this is invisible to the user (the value is "good enough"). The contract is that `refresh_all` and the rendered countdown share the same `now` — that's CORRECT behavior (the fetch's `fetched_at` and the rendered countdown should be consistent). This Info item is descriptive, not prescriptive. No fix recommended; just noting that "share one `now` snapshot" is the design choice.
+
+---
+
+### IN-03: `EVENT_BUFFER = 64` and `EngineEvent` enum are unused scaffolding in Phase 1
+
+**File:** `src/engine/events.rs:14,21-31`
+**Issue:** `tui_loop` calls `engine.refresh_all(...)` directly inside the `select!` arm; no `mpsc::channel(EVENT_BUFFER)` is constructed anywhere in Phase 1. The module doc claims "Plan 03's TUI subscribes via `mpsc::Receiver<EngineEvent>`," but Plan 03 actually drives `refresh_all` from inside the TUI loop directly.
+
+This is dead scaffolding for a future phase. Harmless, but the module doc and the code disagree about whether the channel is wired today.
+
+**Fix:** Update the module doc:
+```rust
+//! Engine event channel types. Reserved for a future engine-driver-loop phase
+//! where the TUI subscribes via `mpsc::Receiver<EngineEvent>`. **Phase 1 is NOT
+//! a consumer** — `tui::tui_loop` calls `engine.refresh_all` directly inside the
+//! fetch-tick arm. The enum + buffer constant stay in tree so future plans land
+//! without touching `engine/`.
 ```
 
 ---
 
-### IN-02: `format_one_line` whitespace collapse swallows valid intra-word whitespace
+### IN-04: `find_active_cluster` silently swallows `Span::since` and `Span::total` errors
 
-**File:** `src/cli/render_text.rs:144-161`
-**Issue:** `format_one_line` collapses ALL runs of spaces into one. For an error message like `"path  with  intentional  doubled-spaces"` (e.g., a Windows file path or a quoted error), the user sees `"path with intentional doubled-spaces"`. Functionally fine; just noting that the collapse is irreversible.
-
-**Fix:** Limit the substitution to literal `\n` / `\r` / `\t` — leaving multi-space runs alone:
+**File:** `src/provider/claude/window.rs:61-66`
+**Issue:** The BL-03 fix uses:
 ```rust
-let cleaned = s.replace(['\n', '\r', '\t'], " ");
-cleaned
+let Ok(gap) = curr.timestamp.since(prev.timestamp) else { continue };
+let Ok(gap_secs) = gap.total(jiff::Unit::Second) else { continue };
+if gap_secs > FIVE_HOURS_SECS { ... }
 ```
 
----
-
-### IN-03: `EVENT_BUFFER = 64` is declared but unused in Phase 1
-
-**File:** `src/engine/events.rs:14`
-**Issue:** No mpsc channel is constructed in Phase 1 — `tui_loop` calls `engine.refresh_all(...)` directly inside the select! arm instead of subscribing to a channel. The `EVENT_BUFFER` constant + `EngineEvent` enum are scaffolding for a future phase. Leave them in but the module docstring promises "Plan 03's TUI subscribes via `mpsc::Receiver<EngineEvent>`" — Plan 03 actually doesn't subscribe; the doc lies about the current architecture.
-
-**Fix:** Update `engine/events.rs` module doc to clarify: "Plan 03's TUI calls `engine.refresh_all` directly; the channel surface lands in a future phase when the engine spawns its own driver loop."
-
----
-
-### IN-04: `format_countdown` uses `unwrap_or_else` on a `since` that takes `Unit::Hour`
-
-**File:** `src/cli/render_text.rs:199-209`
-**Issue:** `target.since((jiff::Unit::Hour, *now))` — `Unit::Hour` is the largest unit, so the returned Span has the form `Xh Ym Zs`. For a target that's 1h 30m away, returns `1h 30m 0s` — `get_minutes()` returns 30, which the format `{m:02}` prints as `30`. Good. For a target 2h 0m 30s away, prints `2h00m` (the 30s is silently dropped). That's the intended behavior (the doc says `Xh00m` format), but a future maintainer might mis-read.
-
-**Fix:** Document the truncation explicitly:
+Both `continue` branches silently skip the comparison. In practice `jiff::Timestamp::since` and `Span::total` on contiguous timestamps will not fail, BUT a `tracing::warn!` on the `else` arms costs nothing and makes any future regression observable:
 ```rust
-/// Format the gap as `Xh{MM}m`. Sub-minute seconds are TRUNCATED (not rounded) so a
-/// 1h 0m 59s gap prints `1h00m`. Use `format_countdown_with_seconds` if you need
-/// sub-minute precision.
+let gap = match curr.timestamp.since(prev.timestamp) {
+    Ok(g) => g,
+    Err(e) => {
+        tracing::warn!("since failed on cluster boundary check: {e}");
+        continue;
+    }
+};
 ```
 
+Same for `total`. Defensive, not blocking.
+
 ---
 
-### IN-05: `directories::ProjectDirs::from("", "", "ahb")` empty qualifier is fragile
+### IN-05: `directories::ProjectDirs::from("", "", "ahb")` empty qualifier (carry-over)
 
 **File:** `src/config.rs:78`
-**Issue:** Calling `ProjectDirs::from("", "", "ahb")` (empty qualifier + organization) works on current `directories` 6.x but is documented as "implementation-defined" for empty args. A future major bump could reject this. Use a deliberate qualifier:
+**Issue:** Carry-over. `ProjectDirs::from("", "", "ahb")` (empty qualifier + organization) works on current `directories` 6.x but is documented as "implementation-defined" for empty args. A future major bump could reject this. Use a deliberate qualifier `from("dev", "ahb", "ahb")` OR pin `directories` to `=6.x` and document the constraint.
+
+---
+
+### IN-06: `secrets::init()` calls `set_default_store` which is one-shot global state
+
+**File:** `src/secrets.rs:124,136`
+**Issue:** `keyring_core::set_default_store(...)` is a process-global one-time write. Calling `secrets::init()` twice in the same process (e.g., in a hypothetical future daemon mode with hot-reload, or in a unit test that doesn't fork) would either fail or silently replace. Phase 1 is safe because integration tests are one-process-per-test-file and `main.rs` calls `init()` exactly once. But if anyone refactors to call `init()` from a long-running path, this becomes a latent bug.
+
+**Fix:** Document the one-shot constraint in the `secrets::init` doc:
 ```rust
-directories::ProjectDirs::from("dev", "ahb", "ahb")
+/// **One-shot:** `keyring_core::set_default_store` is a process-global write that
+/// can only succeed once per process. Tests that exercise both code paths must
+/// run as separate integration-test binaries (cargo's default) rather than as
+/// unit tests in the same binary.
 ```
-This changes the macOS path to `~/Library/Application Support/dev.ahb.ahb/` — a one-time migration for current users, but stable for the future. Or pin the `directories` crate to `=6.x` and document the constraint.
 
 ---
 
