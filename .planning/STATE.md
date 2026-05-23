@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Phase 1 context gathered
-last_updated: "2026-05-23T05:53:30.772Z"
+last_updated: "2026-05-23T06:11:22.664Z"
 last_activity: 2026-05-23
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 20
+  completed_plans: 8
+  percent: 40
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 
 Phase: 01 (engine-claude-tui-scaffold) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-23
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█████████░] 88%
 | Phase 00-spike-spine P03 | 6m | 3 tasks | 6 files |
 | Phase 01-engine-claude-tui-scaffold P01 | 17min | 3 tasks | 17 files |
 | Phase 1 P2 | 12min | 2 tasks | 14 files |
+| Phase 01-engine-claude-tui-scaffold P03 | 12min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 02: drift detector uses raw serde_json::Value re-parse (NOT typed schema widening) — preserves Plan 01 u64 Usage schema (WARNING #2 path-a)
 - [Phase ?]: Plan 02: SchemaDrift renderer uses id_label(id) (NOT hard-coded 'claude') so non-Claude adapters triggering drift render cleanly (WARNING #5)
 - [Phase ?]: Plan 02 Task 1: package legitimacy gate self-verified — all 5 crates' repository fields point to github.com/open-source-cooperative/* (keyring-core + dbus/apple/windows stores) or github.com/RustCrypto/utils (zeroize)
+- [Phase ?]: Plan 03: crossterm 0.29 listed as direct dep with event-stream feature (Rule 3 deviation) — ratatui-crossterm does not propagate the feature; Cargo feature unification keeps single crossterm version (Pitfall L2 invariant verified via cargo tree -i crossterm)
+- [Phase ?]: Plan 03: clippy.toml disallowed-types relaxed to empty (Rule 3 deviation) — type-level bans fight legitimate ratatui::crossterm re-exports; PITFALLS L2 invariant moved to dep-tree level via cargo tree
+- [Phase ?]: Plan 03: ratatui::run sync signature LOCKED (Context7-verified) — async loops bridge via tokio::task::spawn_blocking + Handle::current().block_on. ratatui::init+restore manual pair forbidden (Pitfall L2 grep gate enforces)
+- [Phase ?]: Plan 03 Task 2 checkpoint auto-approved under auto-mode — TUI-04 panic-safe restore + TUI-05 non-TTY refusal verified by automated portable-pty + assert_cmd tests
 
 ### Pending Todos
 
@@ -115,6 +120,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-23T05:53:01.195Z
+Last session: 2026-05-23T06:10:52.171Z
 Stopped at: Phase 1 context gathered
 Resume file: None

@@ -14,7 +14,7 @@ AHB ships in five phases that each deliver an end-to-end, user-runnable binary. 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 0: Spike & Spine** — Gemini go/no-go memo + `model.rs` contract + scaffold + skeleton binary (completed 2026-05-22)
-- [ ] **Phase 1: Engine + Claude + TUI Scaffold** — load-bearing phase: engine, Claude adapter, TUI shell, keyring, panic hook, error isolation
+- [x] **Phase 1: Engine + Claude + TUI Scaffold** — load-bearing phase: engine, Claude adapter, TUI shell, keyring, panic hook, error isolation (completed 2026-05-23)
 - [ ] **Phase 2: Codex + Output Formats** — Codex adapter via spawn_blocking + SQLite, lock `--detailed` / `--json schema_version:1` + exit codes
 - [ ] **Phase 3: Gemini (conditional) + Cache & Refresh Policy** — Gemini adapter (full or stub per Phase 0), per-provider refresh, moka stale-on-error
 - [ ] **Phase 4: Distribution & Release Polish** — cargo-dist + cargo binstall + Gatekeeper docs + crates.io metadata
@@ -68,7 +68,7 @@ Plans:
   4. The TOML config (resolved via the `directories` crate, cross-OS) lists providers with independent enable/disable flags; un-configured providers are silently skipped (not flagged as failures); secrets are stored in OS keyring via `keyring-core` 1.0 and wrapped in a `Secret<T>` newtype whose `Debug` impl redacts the value (CI grep test confirms no plaintext credential pattern in any output).
   5. When Claude Code's JSONL schema changes and too many expected fields go missing, the Claude row renders a visible "Claude adapter may be out-of-date" sentinel instead of silently zeroing the bar.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 **Wave 1**
 
@@ -80,7 +80,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — TUI surface: ratatui::run + 15s/1s tick loop + non-TTY refusal + panic-safe restore [wave 3]
+- [x] 01-03-PLAN.md — TUI surface: ratatui::run + 15s/1s tick loop + non-TTY refusal + panic-safe restore [wave 3]
 
 **UI hint:** yes
 
@@ -137,7 +137,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
-| 1. Engine + Claude + TUI Scaffold | 2/3 | In Progress|  |
+| 1. Engine + Claude + TUI Scaffold | 3/3 | Complete   | 2026-05-23 |
 | 2. Codex + Output Formats | 0/TBD | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
 | 4. Distribution & Release Polish | 0/TBD | Not started | - |

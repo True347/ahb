@@ -18,11 +18,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### TUI
 
-- [ ] **TUI-01**: `AHB tui` 進入固定畫面，每 provider 一條 HP bar + reset 倒數
-- [ ] **TUI-02**: TUI 定時自動 refresh，預設 15s
+- [x] **TUI-01**: `AHB tui` 進入固定畫面，每 provider 一條 HP bar + reset 倒數
+- [x] **TUI-02**: TUI 定時自動 refresh，預設 15s
 - [ ] **TUI-03**: TUI refresh 頻率可由 config 設定，per-provider 可覆寫（必要時 network adapter 可拉長到 ≥5min）
-- [ ] **TUI-04**: TUI panic / Ctrl-C 結束時保證 terminal 還原（無 altscreen / hidden cursor 殘留）
-- [ ] **TUI-05**: TUI 非 TTY 環境下不啟動（給出 clear error），不會把 escape sequence 噴給 pipe
+- [x] **TUI-04**: TUI panic / Ctrl-C 結束時保證 terminal 還原（無 altscreen / hidden cursor 殘留）
+- [x] **TUI-05**: TUI 非 TTY 環境下不啟動（給出 clear error），不會把 escape sequence 噴給 pipe
 
 ### Config
 
@@ -105,11 +105,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-04 | Phase 2 | Pending |
 | CORE-05 | Phase 1 | Complete |
 | CORE-06 | Phase 2 | Pending |
-| TUI-01 | Phase 1 | Pending |
-| TUI-02 | Phase 1 | Pending |
+| TUI-01 | Phase 1 | Complete |
+| TUI-02 | Phase 1 | Complete |
 | TUI-03 | Phase 3 | Pending |
-| TUI-04 | Phase 1 | Pending |
-| TUI-05 | Phase 1 | Pending |
+| TUI-04 | Phase 1 | Complete |
+| TUI-05 | Phase 1 | Complete |
 | CFG-01 | Phase 1 | Complete |
 | CFG-02 | Phase 1 | Complete |
 | CFG-03 | Phase 3 | Pending |
