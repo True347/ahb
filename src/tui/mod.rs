@@ -111,6 +111,13 @@ async fn tui_loop(terminal: &mut DefaultTerminal, engine: Engine) -> anyhow::Res
     // after — the user sees real data immediately.
     let results = engine.refresh_all(jiff::Timestamp::now()).await;
     app.apply_results(results);
+    // IN-01 fix: refresh app.now immediately before the priming draw so the first
+    // rendered frame is not seeded with the pre-prime timestamp (the prime fetch can
+    // take up to DEFAULT_PER_PROVIDER_TIMEOUT). The render-tick arm below already
+    // refreshes per cycle — this closes the priming-frame gap only and keeps the
+    // BL-01 contract intact (the render path is still the SINGLE authorized
+    // wall-clock site in the TUI).
+    app.now = jiff::Timestamp::now();
     terminal.draw(|f| ui::draw(f, &app))?;
 
     let mut events = EventStream::new();
