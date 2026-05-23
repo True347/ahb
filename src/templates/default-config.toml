@@ -1,0 +1,12 @@
+# AHB — AI HP Bar config. Enable the providers you have subscriptions for.
+#
+# Run `AHB` after editing — uncovered providers are silently skipped (not flagged as failures).
+
+[providers.claude]
+enabled = false  # Claude Code subscription — reads ~/.claude/projects/**/*.jsonl
+
+[providers.codex]
+enabled = false  # Codex CLI subscription — not yet implemented (Phase 2)
+
+[providers.gemini]
+enabled = false  # Gemini CLI subscription — not yet implemented (Phase 3)

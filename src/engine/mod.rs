@@ -1,0 +1,146 @@
+//! Engine — the orchestration layer between config + adapters + front-ends.
+//!
+//! Phase 1 layout: `Engine::new(config, secrets)` builds the provider list from
+//! `config.providers.*.enabled` flags; `refresh_all(now)` fans the fetch out via
+//! `fanout::refresh_all_inner` (`JoinSet` + per-adapter timeout + Pitfall L4 panic recovery).
+//!
+//! Task 1a wires the engine against `MockProvider` only. Task 1b extends `Engine::new`
+//! to push `ClaudeProvider` when `cfg.providers.claude.enabled`.
+
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![warn(clippy::pedantic)]
+
+use std::sync::Arc;
+use std::time::Duration;
+
+pub mod events;
+pub mod fanout;
+
+pub use events::{EngineEvent, EVENT_BUFFER};
+pub use fanout::DEFAULT_PER_PROVIDER_TIMEOUT;
+
+use crate::config::Config;
+use crate::model::{ProviderError, ProviderId, ProviderState};
+use crate::provider::Provider;
+use crate::secrets::Secrets;
+
+/// AHB engine. Holds the list of enabled providers + shared secrets handle. Front-ends
+/// (CLI compact line, TUI) consume it via `refresh_all(now)`.
+pub struct Engine {
+    providers: Vec<Arc<dyn Provider>>,
+    secrets: Arc<Secrets>,
+    per_provider_timeout: Duration,
+}
+
+impl Engine {
+    /// Build an engine from the parsed config. Phase 1 Task 1a: pushes `MockProvider`
+    /// when `cfg.providers.mock.enabled`. Codex / Gemini flags emit `tracing::debug!`
+    /// only (not implemented yet). Task 1b adds the `ClaudeProvider` branch.
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)] // builder-style API: takes ownership of config + secrets
+    pub fn new(cfg: Config, secrets: Secrets) -> Self {
+        let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
+
+        if cfg.providers.claude.enabled {
+            tracing::debug!(
+                "providers.claude.enabled is true but ClaudeProvider wiring lands in Task 1b"
+            );
+        }
+        if cfg.providers.codex.enabled {
+            tracing::debug!("providers.codex.enabled is true but Codex adapter is Phase 2 — skipping");
+        }
+        if cfg.providers.gemini.enabled {
+            tracing::debug!(
+                "providers.gemini.enabled is true but Gemini adapter is Phase 3 — skipping"
+            );
+        }
+        if cfg.providers.mock.enabled {
+            providers.push(Arc::new(crate::provider::mock::MockProvider));
+        }
+
+        Self {
+            providers,
+            secrets: Arc::new(secrets),
+            per_provider_timeout: DEFAULT_PER_PROVIDER_TIMEOUT,
+        }
+    }
+
+    /// Number of enabled providers (useful for front-end empty-state detection).
+    #[must_use]
+    pub fn provider_count(&self) -> usize {
+        self.providers.len()
+    }
+
+    /// Fan out one fetch across all enabled providers. Returns
+    /// `Vec<(ProviderId, Result<ProviderState, ProviderError>)>` (Phase 0 contract).
+    pub async fn refresh_all(
+        &self,
+        now: jiff::Timestamp,
+    ) -> Vec<(ProviderId, Result<ProviderState, ProviderError>)> {
+        fanout::refresh_all_inner(
+            &self.providers,
+            now,
+            Arc::clone(&self.secrets),
+            self.per_provider_timeout,
+        )
+        .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, ProviderConfig, Providers};
+
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    fn engine_with_no_providers_has_count_zero() {
+        let cfg = Config::default();
+        let engine = Engine::new(cfg, Secrets::default());
+        assert_eq!(engine.provider_count(), 0);
+    }
+
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    fn engine_with_mock_enabled_has_count_one() {
+        let cfg = Config {
+            providers: Providers {
+                mock: ProviderConfig { enabled: true },
+                ..Default::default()
+            },
+        };
+        let engine = Engine::new(cfg, Secrets::default());
+        assert_eq!(engine.provider_count(), 1);
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn engine_refresh_all_against_mock_returns_one_ok_row() {
+        let cfg = Config {
+            providers: Providers {
+                mock: ProviderConfig { enabled: true },
+                ..Default::default()
+            },
+        };
+        let engine = Engine::new(cfg, Secrets::default());
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let results = engine.refresh_all(now).await;
+        assert_eq!(results.len(), 1);
+        let (pid, result) = &results[0];
+        assert_eq!(*pid, ProviderId::Mock);
+        let state = result.as_ref().unwrap();
+        assert_eq!(state.id, ProviderId::Mock);
+        assert_eq!(state.fetched_at, now);
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn engine_with_disabled_providers_returns_empty() {
+        // All-disabled config: refresh_all returns empty Vec (no error — CFG-04).
+        let cfg = Config::default();
+        let engine = Engine::new(cfg, Secrets::default());
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let results = engine.refresh_all(now).await;
+        assert!(results.is_empty());
+    }
+}

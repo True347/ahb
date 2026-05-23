@@ -1,4 +1,4 @@
-# Cargo.toml — Phase 0
+# Cargo.toml — Phase 0 + Phase 1
 [package]
 name = "ahb"
 version = "0.0.1"
@@ -12,19 +12,61 @@ keywords = ["claude", "codex", "gemini", "cli", "tui"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+# Phase 0 — CLI parsing.
 clap = { version = "4.6", features = ["derive"] }
-# Phase 0 dep minimalism — features kept to ["rt", "macros"]; Phase 1 may upgrade to "rt-multi-thread" when first network adapter ships.
-tokio = { version = "1.52", default-features = false, features = ["rt", "macros"] }
+
+# Phase 0 dep minimalism (rt+macros). Phase 1 upgrades to multi-thread runtime + fs/time/signal/sync
+# because Engine fan-out uses JoinSet and TUI (Plan 03) needs `tokio::time::interval` + `signal::ctrl_c`.
+# DO NOT use features = ["full"] (STACK.md "What NOT to use" — ~30% binary bloat).
+tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread", "macros", "fs", "time", "signal", "sync"] }
+
+# Phase 0 — Provider trait async boxing (dyn-compat).
 async-trait = "0.1"
+
+# Phase 0 — universal (de)serialization.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Phase 0 — date/time, also drives Phase 1 5h cluster anchor math.
 jiff = { version = "0.2", features = ["serde"] }
+
+# Phase 0 — error glue.
 anyhow = "1"
 thiserror = "2"
+
+# Phase 0 — CLI color (used by Phase 1 compact-line bar coloring).
 owo-colors = { version = "4", features = ["supports-colors"] }
 
+# Phase 1 — JSONL file discovery for Claude adapter (REQ ADP-02).
+glob = "0.3"
+
+# Phase 1 — cross-OS config path resolution (REQ CFG-02; D-39).
+directories = "6"
+
+# Phase 1 — TOML config parser (REQ CFG-01; D-36).
+toml = "0.8"
+
+# Phase 1 — structured logging (JSONL parse warns, unknown-key warns, drift warns).
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# DO NOT add `crossterm` directly (STACK.md "What NOT to use" — two crossterm versions in the
+# dep tree silently break ratatui rendering). Phase 1 Plan 03 will use `ratatui::crossterm`
+# re-export. `clippy.toml disallowed-types` enforces this at the source level.
+
 [dev-dependencies]
+# Phase 0 — compile-time trait checks.
 static_assertions = "1"
+
+# Phase 1 — filesystem fixtures for Claude adapter + config + first-run tests.
+tempfile = "3"
+
+# Phase 1 — end-to-end CLI integration tests (assert exit codes, stdout shape, env injection).
+assert_cmd = "2"
+predicates = "3"
+
+# Phase 1 — regex used by Plan 02's secret-leak test and Plan 01's integration test stdout matching.
+regex = "1"
 
 [profile.release]
 # Phase 4 will tune more. Phase 0 default is fine.

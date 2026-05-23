@@ -11,3 +11,5 @@ pub mod model;
 pub mod provider;
 pub mod secrets;
 pub mod cli;
+pub mod config;
+pub mod engine;
