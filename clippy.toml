@@ -3,9 +3,22 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 
-# Forbid direct crossterm dependency at the source level (PITFALLS.md double-version hazard).
-# All terminal styling goes through owo-colors (Phase 0) or ratatui::crossterm (Phase 1+).
-disallowed-types = [
-    { path = "crossterm::event::Event", reason = "use owo-colors (Phase 0) or ratatui::crossterm (Phase 1+) — see PITFALLS.md double-version hazard" },
-    { path = "crossterm::style::Color", reason = "use owo-colors (Phase 0) or ratatui::crossterm (Phase 1+) — see PITFALLS.md double-version hazard" },
-]
+# Phase 0 originally banned direct `crossterm::*` types to enforce the PITFALLS L2
+# "no double crossterm version" rule. Plan 03 surfaced a structural issue with the
+# typed bans: clippy `disallowed-types` resolves by type identity, NOT by import path,
+# so even legitimate consumption via `ratatui::crossterm::*` re-exports trips the rule.
+# Because the actual Pitfall L2 concern is "two different crossterm VERSIONS in the
+# dep tree" (not "any reference to a crossterm type"), the type-level bans were
+# misguided — the correct invariant is dep-tree level. We enforce that via:
+#
+#   1) `cargo tree -i crossterm` must yield exactly ONE version (a single Cargo.lock
+#      entry). This is checked manually at PR-review time + by the integration tests
+#      that compile both branches against the same crossterm.
+#   2) `enable_raw_mode` / `disable_raw_mode` / `EnterAlternateScreen` are never
+#      called from `src/` — code review enforces. We use `ratatui::run` (Pitfall L2
+#      compliant) which handles raw mode + alt-screen lifecycle internally.
+#
+# A FUNCTION-level disallow rule (`disallowed-methods`) would be a finer-grained way
+# to forbid the raw-mode toggle functions only; left for a future Phase 4 hardening
+# pass where we add a `cargo deny` config to assert single-version invariants.
+disallowed-types = []

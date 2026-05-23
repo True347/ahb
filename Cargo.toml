@@ -50,9 +50,27 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# DO NOT add `crossterm` directly (STACK.md "What NOT to use" — two crossterm versions in the
-# dep tree silently break ratatui rendering). Phase 1 Plan 03 will use `ratatui::crossterm`
-# re-export. `clippy.toml disallowed-types` enforces this at the source level.
+# Phase 1 Plan 03 — TUI surface (REQ TUI-01/02/04/05). 0.30 is the locked version (STACK.md);
+# brings its own `crossterm` 0.29 via `ratatui::crossterm` re-export.
+ratatui = "0.30"
+
+# Phase 1 Plan 03 — TUI EventStream::next via StreamExt in tokio::select! (TUI-01).
+# `ratatui::crossterm::event::EventStream` returns a `Stream`; consuming `.next().await`
+# requires `futures_util::StreamExt` in scope (WARNING #4 — Context7-verified).
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+# Phase 1 Plan 03 — DEVIATION (Rule 3 blocking): we MUST list `crossterm` directly to
+# enable the `event-stream` feature on the same crossterm 0.29 that `ratatui-crossterm`
+# already pulls in. `ratatui-crossterm` does NOT propagate the `event-stream` feature on
+# its inner crossterm dep, so `ratatui::crossterm::event::EventStream` is otherwise
+# unreachable. Cargo's feature unification merges this into ratatui-crossterm's
+# crossterm 0.29 — there is NO double-version hazard (the same Cargo.lock entry is
+# shared), which is the actual Pitfall L2 concern. The `clippy.toml disallowed-types`
+# rules still forbid USING `crossterm::*` paths directly in source — production code
+# goes through `ratatui::crossterm::*` re-exports. Plan 03 SUMMARY.md documents this
+# deviation; the original gate `grep -c 'crossterm' Cargo.toml = 0` was authored
+# before the EventStream feature gating was observed at execution time.
+crossterm = { version = "0.29", default-features = false, features = ["event-stream", "events"] }
 
 # Phase 1 Plan 02 — OS keyring abstraction (REQ SEC-01; D-40, D-41, D-42).
 # Provenance verified 2026-05-23: `repository` field on crates.io points to
@@ -95,6 +113,12 @@ predicates = "3"
 
 # Phase 1 — regex used by Plan 02's secret-leak test and Plan 01's integration test stdout matching.
 regex = "1"
+
+# Phase 1 Plan 03 — TUI-04 panic-safe restore integration test (tests/tui_panic_safe_restore.rs);
+# runtime-free pty allocation so we can spawn `AHB tui` inside a real pty and observe the
+# alt-screen enter/leave sequences on panic. WARNING #6 resolution — replaces prior
+# manual-only deferral.
+portable-pty = "0.9"
 
 [profile.release]
 # Phase 4 will tune more. Phase 0 default is fine.

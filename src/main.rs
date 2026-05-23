@@ -76,6 +76,6 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         None => ahb::cli::run_compact(&engine, cli.ascii, cli.color).await,
-        Some(Command::Tui) => ahb::cli::run_tui_stub(),
+        Some(Command::Tui) => ahb::tui::run(engine).await,
     }
 }
