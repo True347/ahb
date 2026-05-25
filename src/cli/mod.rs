@@ -442,4 +442,69 @@ mod tests {
         assert_eq!(DispatchOutcome::AnySuccess.exit_code(), 0);
         assert_eq!(DispatchOutcome::AllFailed.exit_code(), 1);
     }
+
+    // Phase 3 Plan 02 — outcome_to_result translator unit tests. Pins the
+    // RowOutcome → Result mapping that run_compact / run_detailed / run_json
+    // rely on (D-66 + D-73). The Stale arm is exercised via a separate
+    // #[should_panic] test below.
+
+    use crate::engine::cache::RowOutcome;
+    use crate::model::{HpWindow, ProviderError, ProviderState, ResetInfo};
+    use std::borrow::Cow;
+
+    fn synthetic_state_for_translator(id: ProviderId) -> ProviderState {
+        let ts: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        ProviderState {
+            id,
+            windows: vec![HpWindow {
+                label: Cow::Borrowed("test"),
+                percent_remaining: 75.0,
+                reset: ResetInfo {
+                    resets_at: ts + jiff::Span::new().hours(1),
+                },
+                bar_color: None,
+                detailed_label: None,
+            }],
+            fetched_at: ts,
+            source: Cow::Borrowed("test"),
+        }
+    }
+
+    #[test]
+    fn outcome_to_result_fresh_maps_to_ok() {
+        let state = synthetic_state_for_translator(ProviderId::Claude);
+        let outcome = RowOutcome::Fresh(state.clone());
+        let result = outcome_to_result(outcome);
+        let recovered = result.expect("Fresh must map to Ok");
+        assert_eq!(recovered.id, ProviderId::Claude);
+        assert_eq!(recovered.fetched_at, state.fetched_at);
+    }
+
+    #[test]
+    fn outcome_to_result_failed_maps_to_err() {
+        let outcome = RowOutcome::Failed(ProviderError::Unavailable {
+            reason: "boom".into(),
+        });
+        let result = outcome_to_result(outcome);
+        match result {
+            Err(ProviderError::Unavailable { reason }) => assert_eq!(reason, "boom"),
+            other => panic!("expected Err(Unavailable), got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "CLI cache is always empty")]
+    fn outcome_to_result_stale_panics_via_unreachable() {
+        // D-66 + D-73: CLI cache is always empty, so Stale is structurally
+        // impossible. The unreachable!() is a correctness assertion — if
+        // this test ever stops panicking, the invariant has been broken
+        // upstream (a future refactor wired CLI through a persistent
+        // engine instance).
+        let state = synthetic_state_for_translator(ProviderId::Codex);
+        let outcome = RowOutcome::Stale {
+            state,
+            stale_age_secs: 30,
+        };
+        let _ = outcome_to_result(outcome);
+    }
 }
