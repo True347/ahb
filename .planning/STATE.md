@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-05-25T11:33:05.655Z"
+last_updated: "2026-05-25T11:40:13.377Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 60
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 03 (gemini-conditional-cache-refresh-policy) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-05-25
 
-Progress: [████████░░] 82%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Progress: [████████░░] 82%
 | Phase 02-codex-output-formats P03 | 18min | 2 tasks | 9 files |
 | Phase Phase 03-gemini-conditional-cache-refresh-policy PP01 | 3min | 3 tasks | 8 files |
 | Phase 03 P02 | 11m | 3 tasks | 8 files |
+| Phase 03 P04 | 2m20s | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-02: Engine::refresh_all picks Q3 Option A (pre-filter + skip fanout for TTL-hit providers) per D-72/D-73; Pitfall 16 honored — all-cache pass still emits one row per provider, not empty Vec.
 - [Phase ?]: Plan 03-02: cli::outcome_to_result Stale arm = unreachable!() with #[should_panic] test pinning D-66+D-73 invariant (CLI cache always empty); moka cache uses max_capacity(8) with no TTL/TTI (manual stale semantics per D-71).
 - [Phase ?]: Plan 03-02 Rule 3 deviation: cli + tui scaffold bundled into Task 2 GREEN (cb18343) because cargo build --lib is a Task 2 acceptance criterion and Engine::refresh_all return-type change cascades into cli/render_json/tui callers; Task 3 (0732130) adds outcome_to_result unit tests.
+- [Phase ?]: [Phase 03-04]: GeminiUnimplementedProvider error reason locked to D-65 literal 'Gemini adapter deferred to v2 — see README §Gemini status'; regression test pins negative assertion against Phase 2 wording revert
+- [Phase ?]: [Phase 03-04]: README.md created (didn't exist) with locked '## Gemini adapter status — deferred to v2' section per D-65 + SC-2 ToS warning; default-config.toml comment per D-64; three-source literal alignment makes the deferral message grep-discoverable across error/config/docs
+- [Phase ?]: [Phase 03-04] Rule 1 deviation: tests/exit_codes.rs::exit_code_1_when_only_gemini_enabled assertion rotated from 'not yet implemented' to 'Gemini adapter deferred to v2' — knock-on edit forced by D-65 reason change (4th file beyond plan's declared 3)
 
 ### Pending Todos
 
@@ -150,6 +154,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T11:32:54.269Z
+Last session: 2026-05-25T11:39:43.500Z
 Stopped at: Phase 3 context gathered
 Resume file: None
