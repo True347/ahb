@@ -341,6 +341,71 @@ impl Engine {
             refresh_intervals,
         }
     }
+
+    /// Integration-test affordance: build an `Engine` from an explicit provider
+    /// list + the user's `Config`, bypassing Config-based provider construction
+    /// while still honoring the per-provider `refresh_interval` (with ≥5s clamp
+    /// per D-72) from the config block matching each provider's id.
+    ///
+    /// This constructor is `pub` so integration tests under `tests/` can plug
+    /// in stateful test providers (e.g., `ScriptedProvider`) without going
+    /// through the full Config-driven provider construction path. `#[doc(hidden)]`
+    /// hides it from the public API surface — production code MUST use
+    /// `Engine::new(cfg, secrets)`. The original plan called for `#[cfg(test)]`
+    /// here but that would gate this constructor out of integration test crates
+    /// (Rust's `cfg(test)` only flips on for the crate currently being built as
+    /// a `--test` target — when `cargo test` builds the lib for an integration
+    /// test target it does NOT pass `--cfg test` to rustc). `#[doc(hidden)]` +
+    /// `pub` is the canonical Rust idiom for "test helper that must cross the
+    /// crate boundary but is not part of the public contract."
+    ///
+    /// For each provider in `providers`, the matching `cfg.providers.<id>`
+    /// block is consulted: if `refresh_interval` is `Some(n)`, the standard
+    /// `resolve_interval` helper applies the ≥5s clamp + `tracing::warn!`;
+    /// otherwise the per-provider `DEFAULT_REFRESH_INTERVAL_SECS` is used.
+    #[doc(hidden)]
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn new_with_providers(
+        providers: Vec<Arc<dyn Provider>>,
+        cfg: Config,
+        secrets: Secrets,
+    ) -> Self {
+        let mut refresh_intervals: HashMap<ProviderId, Duration> = HashMap::new();
+        for p in &providers {
+            let id = p.id();
+            let (id_str, pc, default_secs) = match id {
+                ProviderId::Claude => (
+                    "claude",
+                    &cfg.providers.claude,
+                    claude::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+                ProviderId::Codex => (
+                    "codex",
+                    &cfg.providers.codex,
+                    codex::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+                ProviderId::Gemini => (
+                    "gemini",
+                    &cfg.providers.gemini,
+                    gemini::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+                ProviderId::Mock => (
+                    "mock",
+                    &cfg.providers.mock,
+                    mock::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+            };
+            refresh_intervals.insert(id, Self::resolve_interval(id_str, pc, default_secs));
+        }
+        Self {
+            providers,
+            secrets: Arc::new(secrets),
+            per_provider_timeout: DEFAULT_PER_PROVIDER_TIMEOUT,
+            cache: Cache::builder().max_capacity(8).build(),
+            refresh_intervals,
+        }
+    }
 }
 
 /// Compute `now - earlier` as a non-negative `Duration`. Negative spans (clock
