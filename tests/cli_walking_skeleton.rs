@@ -165,6 +165,14 @@ fn ahb_with_all_providers_disabled_prints_empty_state() {
 fn ahb_with_broken_claude_config_prints_error_row_not_crash() {
     // ClaudeProvider's base_path is HOME/.claude/projects. If we don't create that
     // directory, the adapter returns Err(Unavailable { reason: "~/.claude/projects not found — is Claude Code installed?" }).
+    //
+    // Phase 2 Plan 02-03 D-59 wiring: Claude is the only enabled provider here
+    // and it returns Err — so the dispatch returns AllFailed (exit 1). The
+    // stdout still contains the user-facing ERROR row (key invariant of this
+    // test: AHB does NOT crash; it renders the canonical row + exits 1). The
+    // exit-code mapping is independently covered by
+    // `tests/exit_codes.rs::exit_code_1_when_all_providers_fail`; here we
+    // re-assert the row shape AND the new exit-1 contract together.
     let tmp = tempfile::tempdir().unwrap();
     let home = tmp.path();
     let xdg = home.join("config_home");
@@ -177,7 +185,7 @@ fn ahb_with_broken_claude_config_prints_error_row_not_crash() {
     .unwrap();
     // Deliberately do NOT create .claude/projects under HOME.
 
-    let assert = Command::cargo_bin("ahb")
+    let output = Command::cargo_bin("ahb")
         .unwrap()
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", &xdg)
@@ -186,9 +194,15 @@ fn ahb_with_broken_claude_config_prints_error_row_not_crash() {
         // Plan 02: bypass D-41 keyring init on backend-less hosts so Plan 01 happy
         // path stays exercisable on CI / dev machines without dbus / Keychain.
         .env("AHB_SECRETS_MOCK", "1")
-        .assert()
-        .success();
-    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        .output()
+        .expect("subprocess should run");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "Phase 2 D-59: all-providers-fail must exit 1; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let line = stdout.lines().next().expect("at least one line");
     assert!(line.starts_with("claude  ERROR:"), "expected ERROR row, got: {line:?}");
     assert!(

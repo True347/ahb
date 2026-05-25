@@ -45,6 +45,47 @@ fn subprocess_secret_does_not_leak() {
     );
 }
 
+/// Phase 2 Plan 02-03 / D-62 SEC-03 extension. Drives the same fake-secret
+/// fixture through the `--json` route (`debug_emit_fake_secret_and_exit(as_json=true)`)
+/// to prove that `Secret<T>::Serialize → "[REDACTED]"` holds when the secret
+/// flows through the production `run_json` serialization path (top-level
+/// JsonRoot-shaped envelope, not the Plan 02 sibling envelope).
+///
+/// Three assertions mirror the original test:
+/// 1. Literal fixture absent from stdout.
+/// 2. No 20+-char alphanumeric run on stdout (defense against `Display` bypass
+///    that might emit the secret without going through `Serialize`).
+/// 3. `[REDACTED]` marker present (positive proof the `Serialize` path ran).
+#[test]
+#[cfg(debug_assertions)]
+fn subprocess_json_path_redacts_secret() {
+    let output = assert_cmd::Command::cargo_bin("ahb")
+        .unwrap()
+        .arg("--json")
+        .arg("--debug-emit-fake-secret")
+        .output()
+        .expect("subprocess should run");
+    assert!(
+        output.status.success(),
+        "subprocess should exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !stdout.contains(FIXTURE),
+        "--json route leaked the literal secret fixture: {stdout}"
+    );
+    let re = regex::Regex::new("[A-Za-z0-9]{20,}").unwrap();
+    assert!(
+        !re.is_match(&stdout),
+        "--json route emitted a high-entropy 20+-char alphanumeric run: {stdout}"
+    );
+    assert!(
+        stdout.contains("[REDACTED]"),
+        "expected `[REDACTED]` marker on --json route stdout; got: {stdout}"
+    );
+}
+
 #[test]
 #[cfg(not(debug_assertions))]
 fn subprocess_secret_skipped_in_release() {

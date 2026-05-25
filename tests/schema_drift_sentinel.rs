@@ -62,9 +62,15 @@ fn drift_in_recent_assistants_triggers_sentinel_literal() {
         .output()
         .expect("subprocess should run");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        output.status.success(),
-        "ahb should exit 0; stderr: {}",
+    // Phase 2 Plan 02-03 D-59 + D-60 binding: SchemaDrift counts as Err for
+    // exit-code purposes (NOT degraded success). Claude is the only enabled
+    // provider here and it returns SchemaDrift → dispatch returns AllFailed
+    // (exit 1). The stdout sentinel literal is still rendered (key invariant
+    // of this test: user-visible UI-SPEC behavior is unchanged).
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "ahb should exit 1 (SchemaDrift = fail per D-60); stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(

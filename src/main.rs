@@ -42,12 +42,14 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    // Plan 02 BLOCKER #1 (D-43 path-b): hidden debug-build-only fake-secret emitter.
-    // Dispatched BEFORE secrets::init() / config loading so the subprocess test can run
-    // on backend-less CI runners without needing a keyring.
+    // Plan 02 BLOCKER #1 (D-43 path-b) + Plan 02-03 D-62 SEC-03 extension:
+    // hidden debug-build-only fake-secret emitter. Dispatched BEFORE secrets::init()
+    // / config loading so the subprocess test can run on backend-less CI runners
+    // without needing a keyring. `cli.json` selects which envelope shape is exercised
+    // (Plan 02 shape when false; JsonRoot-shaped envelope when true).
     #[cfg(debug_assertions)]
     if cli.debug_emit_fake_secret {
-        ahb::cli::debug_emit_fake_secret_and_exit();
+        ahb::cli::debug_emit_fake_secret_and_exit(cli.json);
     }
 
     let config_path = config::default_path()?;
@@ -88,23 +90,31 @@ async fn main() -> anyhow::Result<()> {
 
     let engine = Engine::new(cfg, secrets);
 
-    // Plan 02-03 Task 1: run_compact / run_detailed now return Result<DispatchOutcome>.
-    // The exit-code wiring (Task 2) replaces this match with a `let outcome = ...; std::process::exit(outcome.exit_code())` form.
-    // For Task 1 we discard the outcome to preserve the prior behavior (exit 0 on success).
-    match cli.command {
-        Some(Command::Tui) => ahb::tui::run(engine).await,
-        None => {
-            // Phase 2 D-53 / CORE-03: `--detailed` selects the multi-line
-            // per-provider block view. Plan 02-03 will introduce the full
-            // `--compact / --detailed / --json` clap ArgGroup; in Plan 02-02
-            // the flag stands alone and the no-flag default stays compact
-            // (byte-identical to Phase 1).
-            if cli.detailed {
-                ahb::cli::run_detailed(&engine, cli.ascii, cli.color).await?;
-            } else {
-                ahb::cli::run_compact(&engine, cli.ascii, cli.color).await?;
-            }
-            Ok(())
+    // Plan 02-03 D-59 exit-code wiring: each `run_*` dispatch fn returns a
+    // `DispatchOutcome`; we map it to a Unix exit code and call
+    // `std::process::exit`. TUI is unconditional exit-0 (it has its own
+    // exit semantics). The clap `ArgGroup` on `Cli` rejects flag conflicts
+    // with exit-2 BEFORE this code runs; config / secrets unloadable also
+    // exits with 2 above (lines 53-87), so this dispatch sees only the
+    // 0/1 paths.
+    let outcome = match cli.command {
+        Some(Command::Tui) => {
+            ahb::tui::run(engine).await?;
+            // TUI doesn't gate exit code on the provider grid — explicit 0.
+            return Ok(());
         }
-    }
+        None => {
+            // `--compact` falls through to the default `run_compact` branch
+            // (semantically equivalent to no flag — D-57 + CORE-02). The clap
+            // ArgGroup guarantees at most one of compact/detailed/json is set.
+            if cli.json {
+                ahb::cli::render_json::run_json(&engine, cli.color).await?
+            } else if cli.detailed {
+                ahb::cli::run_detailed(&engine, cli.ascii, cli.color).await?
+            } else {
+                ahb::cli::run_compact(&engine, cli.ascii, cli.color).await?
+            }
+        }
+    };
+    std::process::exit(outcome.exit_code());
 }

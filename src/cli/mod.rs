@@ -61,12 +61,47 @@ impl DispatchOutcome {
 }
 
 /// AHB command-line surface.
+///
+/// Phase 2 Plan 02-03: the three output-format flags (`--compact`, `--detailed`,
+/// `--json`) are bound into a single clap `ArgGroup` named `"format"` with
+/// `multiple = false`. clap enforces the mutual-exclusion at parse time and
+/// exits `2` with `"the argument '--X' cannot be used with '--Y'"` on stderr
+/// (D-57 binding). Omitting all three falls through to the compact default
+/// (byte-identical to Phase 1). The `after_help` block documents the D-59
+/// exit-code grid (D-61 binding).
 #[derive(clap::Parser, Debug)]
 #[command(
     version,
-    about = "AHB — AI HP Bar — multi-CLI subscription session usage at a glance"
+    about = "AHB — AI HP Bar — multi-CLI subscription session usage at a glance",
+    after_help = "Exit codes:\n  0  at least one provider returned data (or no providers configured)\n  1  all configured providers failed\n  2  config / secrets unloadable, or invalid command-line usage",
+    group(
+        clap::ArgGroup::new("format")
+            .required(false)
+            .multiple(false)
+            .args(["compact", "detailed", "json"]),
+    ),
 )]
 pub struct Cli {
+    /// Phase 2 CORE-02: force the compact one-line-per-provider view. Equivalent
+    /// to no flag (Phase 1 default). Explicit form is grep-friendly for tmux /
+    /// Starship integrations that want to assert "single-line output". Mutually
+    /// exclusive with `--detailed` and `--json` (clap `ArgGroup`).
+    #[arg(long)]
+    pub compact: bool,
+
+    /// Phase 2 D-53 / CORE-03: print a multi-line block per provider with header
+    /// + indented per-window rows (Claude shows both 5h and weekly bars).
+    /// Mutually exclusive with `--compact` and `--json` (clap `ArgGroup`).
+    #[arg(long)]
+    pub detailed: bool,
+
+    /// Phase 2 CORE-04 / D-49..D-52: emit a single-line JSON envelope with
+    /// `schema_version: 1`. ANSI styling and `--ascii` are silently ignored
+    /// (D-58). Mutually exclusive with `--compact` and `--detailed` (clap
+    /// `ArgGroup`).
+    #[arg(long)]
+    pub json: bool,
+
     /// Force ASCII charset (uses '#' / '-' instead of the U+2588 / U+2591 blocks).
     #[arg(long)]
     pub ascii: bool,
@@ -74,14 +109,6 @@ pub struct Cli {
     /// Color mode. Auto-detects TTY + `NO_COLOR` by default; pass `never` / `always` to override.
     #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
     pub color: ColorMode,
-
-    /// Phase 2 D-53 / CORE-03: print a multi-line block per provider with header
-    /// + indented per-window rows (Claude shows both 5h and weekly bars). When
-    /// absent, the default compact one-line view applies. Plan 02-03 will add
-    /// the full `--compact / --detailed / --json` ArgGroup interlock; in Plan
-    /// 02-02 the flag lives in isolation with NO `conflicts_with` attribute.
-    #[arg(long)]
-    pub detailed: bool,
 
     /// D-43 integration tier: debug-build-only fake-secret emitter for
     /// `tests/secret_leak_subprocess.rs`. NOT compiled into release builds —
@@ -212,45 +239,72 @@ pub async fn run_detailed(
     Ok(DispatchOutcome::from_results(&results))
 }
 
-/// D-43 integration tier (BLOCKER #1 path-b). Emits a one-line JSON envelope containing
-/// a `Secret<String>` whose inner value is the high-entropy fixture
+/// D-43 + D-62 integration tier. Emits a JSON envelope containing a
+/// `Secret<String>` whose inner value is the high-entropy fixture
 /// `deadbeefcafe1234567890abcdef`, then exits with code 0.
 ///
-/// `tests/secret_leak_subprocess.rs` invokes this subprocess and asserts:
-/// (a) the literal fixture is absent from stdout, (b) no 20-char alphanumeric run is
-/// present, (c) the `[REDACTED]` marker IS present (proves the Serialize path ran).
+/// `as_json` selects which envelope shape is exercised:
 ///
-/// `#[cfg(debug_assertions)]` so release builds (cargo-dist) literally cannot compile
-/// the function in. The companion `Cli::debug_emit_fake_secret` field on this module's
-/// `Cli` struct is also gated.
+/// - `false` — the Plan 02 emission shape `{"fake_secret":"[REDACTED]"}`
+///   (byte-identical to Phase 1 behavior; `subprocess_secret_does_not_leak`
+///   continues to assert this path).
+/// - `true` — a JsonRoot-shaped envelope `{"schema_version":1,"fake_secret_in_label":"[REDACTED]"}`
+///   that exercises the same `Serialize` path the production `run_json` driver
+///   uses, proving `Secret<T>::Serialize → "[REDACTED]"` holds when emitted
+///   through the `--json` route (SEC-03 / D-62).
+///
+/// `tests/secret_leak_subprocess.rs` invokes the binary with
+/// `--debug-emit-fake-secret` for the non-JSON path and
+/// `--json --debug-emit-fake-secret` for the JSON path; both assert:
+/// (a) the literal fixture is absent from stdout, (b) no 20-char alphanumeric
+/// run is present, (c) the `[REDACTED]` marker IS present (proves the
+/// `Serialize` path ran).
+///
+/// `#[cfg(debug_assertions)]` so release builds (cargo-dist) literally cannot
+/// compile the function in. The companion `Cli::debug_emit_fake_secret` field
+/// on this module's `Cli` struct is also gated.
 ///
 /// # Panics
 ///
-/// Panics if `serde_json::to_writer` fails to serialize the redacted `Secret<String>`
-/// envelope, or if `writeln!` fails on stdout. A failure here would mean
-/// `Serialize for Secret<T>` is broken — exactly what
-/// `tests/secret_leak_subprocess.rs` is designed to surface. Test failure is the
-/// intended outcome rather than silent fall-through.
+/// Panics if `serde_json::to_writer` fails to serialize the redacted
+/// `Secret<String>` envelope, or if `writeln!` fails on stdout. A failure here
+/// would mean `Serialize for Secret<T>` is broken — exactly what
+/// `tests/secret_leak_subprocess.rs` is designed to surface. Test failure is
+/// the intended outcome rather than silent fall-through.
 #[cfg(debug_assertions)]
-pub fn debug_emit_fake_secret_and_exit() -> ! {
+pub fn debug_emit_fake_secret_and_exit(as_json: bool) -> ! {
     use std::io::Write;
-    #[derive(serde::Serialize)]
-    struct DebugEnvelope<'a> {
-        fake_secret: &'a crate::secrets::Secret<String>,
-    }
     let s = crate::secrets::Secret::new("deadbeefcafe1234567890abcdef".to_string());
-    let envelope = DebugEnvelope { fake_secret: &s };
-    // `to_writer` directly drives the same `Serialize for Secret<T>` impl that
-    // `--json` would exercise in Phase 2 CORE-04. We intentionally bypass error
-    // handling: a JSON-emit failure here is a bug in Serialize-for-Secret and
-    // the test should fail loudly. Using `write!`+`?` would force this fn to
-    // return a Result and complicate the !-return type; instead we use a small
-    // unwrap with a scoped allow.
     let mut stdout = std::io::stdout().lock();
     #[allow(clippy::unwrap_used)] // debug-only fixture emitter; bug here = test failure
     {
-        serde_json::to_writer(&mut stdout, &envelope).unwrap();
-        writeln!(stdout).unwrap();
+        if as_json {
+            // D-62 SEC-03 extension: exercise the same Serialize path the
+            // production --json driver uses. The envelope mimics JsonRoot's
+            // top-level schema_version field so a future grep for
+            // `"schema_version":1` on stdout would match either path.
+            #[derive(serde::Serialize)]
+            struct DebugJsonEnvelope<'a> {
+                schema_version: u8,
+                fake_secret_in_label: &'a crate::secrets::Secret<String>,
+            }
+            let env = DebugJsonEnvelope {
+                schema_version: 1,
+                fake_secret_in_label: &s,
+            };
+            serde_json::to_writer(&mut stdout, &env).unwrap();
+            writeln!(stdout).unwrap();
+        } else {
+            // Plan 02 emission shape — preserved byte-identical so the
+            // existing `subprocess_secret_does_not_leak` test stays green.
+            #[derive(serde::Serialize)]
+            struct DebugEnvelope<'a> {
+                fake_secret: &'a crate::secrets::Secret<String>,
+            }
+            let envelope = DebugEnvelope { fake_secret: &s };
+            serde_json::to_writer(&mut stdout, &envelope).unwrap();
+            writeln!(stdout).unwrap();
+        }
     }
     std::process::exit(0);
 }
