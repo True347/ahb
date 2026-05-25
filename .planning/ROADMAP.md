@@ -133,11 +133,11 @@ Plans:
 **Wave 1** *(parallel)*
 
 - [ ] 03-01-PLAN.md — refresh_interval config field + per-provider DEFAULT_REFRESH_INTERVAL_SECS + parse tests (CFG-03 partial) [wave 1]
-- [ ] 03-04-PLAN.md — Gemini stub error reason + default-config comment + README §Gemini status (ADP-05) [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [ ] 03-02-PLAN.md — moka dep + CacheEntry/RowOutcome/is_transient + Engine::refresh_all rewrite + CLI dispatch update (TUI-03 core) [wave 2]
+- [ ] 03-04-PLAN.md — Gemini stub error reason + default-config comment + README §Gemini status (ADP-05) [wave 2] *(moved to Wave 2 to avoid src/provider/gemini.rs parallel-write conflict with 03-01)*
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
