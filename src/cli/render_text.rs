@@ -61,6 +61,36 @@ pub fn compact_line_colored(
         "ProviderState must have at least one window"
     );
     let w = &state.windows[0];
+
+    // WR-01: NaN guard. `f32::clamp` short-circuits when either bound is NaN
+    // but propagates NaN when the value itself is NaN — and `(NaN * k).round()
+    // as usize` is implementation-defined (saturating-to-zero on x86-64, but
+    // brittle). A NaN-percent state currently renders as a fully-empty RED
+    // bar with "0%", which is the "exhausted" signal — the opposite of the
+    // truth ("unknown"). Mirror `render_window_row`'s NaN sentinel: 10 U+2592
+    // medium-shade cells + ??% + `(limit unknown)` suffix. Today this only
+    // matters if an adapter ever puts NaN into `windows[0]` (Claude weekly
+    // sits in `windows[1]`, so the compact path is currently safe by virtue
+    // of indexing); future adapters that emit NaN in their primary window
+    // would silently produce the misleading bar.
+    if w.percent_remaining.is_nan() {
+        let bar_owned = "\u{2592}".repeat(BAR_WIDTH);
+        let countdown = format_countdown(now, &w.reset.resets_at);
+        let sep = if ascii { '|' } else { '\u{2022}' };
+        if color_on {
+            return format!(
+                "{label}  {bar} {pct} {sep} resets in {countdown} (limit unknown)",
+                label = id_label(state.id),
+                bar = bar_owned.bright_black(),
+                pct = "??%".bright_black(),
+            );
+        }
+        return format!(
+            "{label}  {bar_owned} ??% {sep} resets in {countdown} (limit unknown)",
+            label = id_label(state.id),
+        );
+    }
+
     let pct = w.percent_remaining.clamp(0.0, 100.0);
     let filled = filled_cells(pct);
 
@@ -534,6 +564,70 @@ mod tests {
 
         let line = compact_line_colored(&state, &now, true, false);
         assert!(!line.contains("\x1b["), "uncolored line must not contain ANSI escapes: {line:?}");
+    }
+
+    // WR-01: NaN percent_remaining must render the limit-unknown sentinel
+    // (10 U+2592 medium-shade cells + ??% + `(limit unknown)`), NOT a fully
+    // empty RED bar with `0%`. Pre-fix the `(NaN * 10 / 100).round() as usize`
+    // cast collapses to 0, and the threshold match falls through to Red
+    // because every NaN comparison returns false — exactly the "exhausted"
+    // signal that misrepresents "unknown".
+    #[test]
+    fn compact_line_nan_percent_renders_unknown_sentinel_not_red_zero() {
+        let now: jiff::Timestamp = "2026-05-22T12:00:00Z".parse().unwrap();
+        let resets_at = now + jiff::Span::new().hours(2);
+        let state = make_state(f32::NAN, resets_at);
+
+        let line = compact_line(&state, &now, false);
+        assert!(
+            line.contains("??%"),
+            "NaN line must contain ??% sentinel: {line:?}"
+        );
+        assert!(
+            line.ends_with("(limit unknown)"),
+            "NaN line must end with `(limit unknown)`: {line:?}"
+        );
+        // U+2592 medium-shade bytes (e2 96 92) — ≥ 10 cells.
+        let count = line
+            .as_bytes()
+            .windows(3)
+            .filter(|w| *w == [0xe2, 0x96, 0x92])
+            .count();
+        assert!(
+            count >= 10,
+            "expected ≥ 10 U+2592 medium-shade bytes, got {count}: {line:?}"
+        );
+        // Must NOT contain U+2591 light-shade (compact-mode "empty" cell —
+        // would mean we fell through to the post-clamp path).
+        let light_count = line
+            .as_bytes()
+            .windows(3)
+            .filter(|w| *w == [0xe2, 0x96, 0x91])
+            .count();
+        assert_eq!(
+            light_count, 0,
+            "NaN line must NOT use U+2591 light-shade: {line:?}"
+        );
+        // Must NOT contain a literal `0%` (the pre-fix misleading signal).
+        assert!(
+            !line.contains(" 0% "),
+            "NaN line must NOT render as `0%`: {line:?}"
+        );
+    }
+
+    #[test]
+    fn compact_line_nan_percent_ascii_uses_pipe_separator() {
+        let now: jiff::Timestamp = "2026-05-22T12:00:00Z".parse().unwrap();
+        let resets_at = now + jiff::Span::new().hours(2);
+        let state = make_state(f32::NAN, resets_at);
+
+        // ASCII flag flips the separator U+2022 → `|` — but the NaN sentinel
+        // bar stays U+2592 (matches the detailed-mode and SchemaDrift policy:
+        // sentinel cells need to be visually unmistakable; `--ascii` is a
+        // glyph-fallback flag, not a "no Unicode" requirement).
+        let line = compact_line(&state, &now, true);
+        assert!(line.contains(" | resets in"), "ascii separator wrong: {line:?}");
+        assert!(line.contains("??%"), "ascii NaN line must contain ??%: {line:?}");
     }
 
     #[test]
