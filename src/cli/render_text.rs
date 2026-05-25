@@ -195,19 +195,29 @@ pub fn format_error_row_colored(
 #[must_use]
 pub(crate) fn format_one_line(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut prev_space = false;
+    // WR-03: initialize `prev_space = true` so a leading newline / CR / tab
+    // / space is dropped at column 0 instead of becoming a leading space
+    // in the output (which then leaked into `JsonError.message` as wire
+    // noise like `"message":" something broke"`). Standard sanitizer
+    // semantics: normalize internal whitespace, trim ends.
+    let mut prev_space = true;
     for ch in s.chars() {
-        let is_ws = ch == '\n' || ch == '\r' || ch == '\t';
-        let ch = if is_ws { ' ' } else { ch };
-        if ch == ' ' {
+        let is_ws = ch == '\n' || ch == '\r' || ch == '\t' || ch == ' ';
+        if is_ws {
             if !prev_space {
                 out.push(' ');
+                prev_space = true;
             }
-            prev_space = true;
         } else {
             out.push(ch);
             prev_space = false;
         }
+    }
+    // WR-03: trim any trailing whitespace introduced by the collapse loop.
+    // Only one trailing space is possible (the collapse logic emits at most
+    // one consecutive space) so a single `pop()` suffices.
+    if out.ends_with(' ') {
+        out.pop();
     }
     out
 }
@@ -543,6 +553,24 @@ mod tests {
         };
         let row = format_error_row(ProviderId::Claude, &err, false);
         assert!(!row.contains('\n'), "row leaks newline: {row}");
+    }
+
+    // WR-03: leading and trailing whitespace must be stripped, internal
+    // runs collapsed to a single space. Pre-fix the loop initialized
+    // `prev_space = false`, so a leading `\n` became a leading space in
+    // the output — which then leaked into `JsonError.message` as wire
+    // noise (`"message":" something broke "`).
+    #[test]
+    fn format_one_line_strips_leading_and_trailing_whitespace() {
+        assert_eq!(format_one_line("\n  foo  \n"), "foo");
+        assert_eq!(format_one_line("\t\tbar\t\t"), "bar");
+        assert_eq!(format_one_line("   "), "");
+        // Internal collapse still works.
+        assert_eq!(format_one_line("foo\n\n\tbar  baz"), "foo bar baz");
+        // No surrounding whitespace is a no-op.
+        assert_eq!(format_one_line("already clean"), "already clean");
+        // Empty input stays empty.
+        assert_eq!(format_one_line(""), "");
     }
 
     // Phase 1: compact_line_colored emits ANSI escape bytes when color_on is true
