@@ -225,7 +225,7 @@ fn exit_code_1_when_only_gemini_enabled() {
         "stdout should render a `gemini` row, got: {stdout}"
     );
     assert!(
-        stdout.contains("not yet implemented"),
-        "stdout should explain Phase 3 status to the user, got: {stdout}"
+        stdout.contains("Gemini adapter deferred to v2"),
+        "stdout should explain Phase 3 NO-GO deferral to the user (D-65), got: {stdout}"
     );
 }

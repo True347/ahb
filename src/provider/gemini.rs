@@ -51,9 +51,7 @@ impl Provider for GeminiUnimplementedProvider {
         // handle to keep the trait shape honest even though we never query it.
         let _ = ctx.secrets;
         Err(ProviderError::Unavailable {
-            reason: "Gemini provider is not yet implemented (Phase 3) — set \
-                     [providers.gemini].enabled = false to suppress this row"
-                .into(),
+            reason: "Gemini adapter deferred to v2 — see README §Gemini status".into(),
         })
     }
 }
