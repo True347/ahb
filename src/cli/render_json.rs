@@ -48,7 +48,9 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::cli::render_text::{format_one_line, id_label};
-use crate::cli::tty;
+// WR-06: `crate::cli::tty` import dropped — see `run_json` for the rationale
+// (D-58 is now satisfied structurally, not by a runtime `should_colorize_env`
+// call).
 use crate::cli::{ColorMode, DispatchOutcome};
 use crate::engine::Engine;
 use crate::model::{HpWindow, ProviderError, ProviderId, ProviderState};
@@ -235,28 +237,33 @@ fn error_to_json(e: &ProviderError) -> JsonError {
 /// ideas) and returns the `DispatchOutcome` for main.rs exit-code wiring.
 ///
 /// `color_flag` is accepted for API symmetry with `run_compact` / `run_detailed`
-/// but its value is silently ignored: `tty::should_colorize_env(_, true)`
-/// always returns `false` (D-58), and `render_json` emits no ANSI bytes
-/// regardless (no `.green()` / `.red()` calls in this module). The call to
-/// `should_colorize_env` documents the contract at the call site and exercises
-/// the `json_mode=true` path for the side effect of consistency.
+/// but its value is silently ignored per D-58: this module emits zero ANSI
+/// bytes (no `.green()` / `.red()` calls anywhere — that is the compile-time
+/// guarantee that satisfies the D-58 binding, NOT a runtime call to
+/// `should_colorize_env`). The parameter is accepted-and-discarded with a
+/// leading underscore so the call sites in `cli/mod.rs` and `main.rs` can
+/// pass `cli.color` uniformly.
 ///
 /// # Errors
 ///
 /// Returns `Err` if `serde_json::to_writer` fails (e.g. stdout pipe broken
 /// mid-write) or the trailing newline `writeln!` fails. Both collapse to
 /// `anyhow::Error` so `main.rs` can apply the exit-1 path uniformly.
-pub async fn run_json(engine: &Engine, color_flag: ColorMode) -> anyhow::Result<DispatchOutcome> {
+pub async fn run_json(
+    engine: &Engine,
+    _color_flag: ColorMode,
+) -> anyhow::Result<DispatchOutcome> {
     let now = jiff::Timestamp::now();
     let results = engine.refresh_all(now).await;
 
-    // D-58: --color is silently ignored in JSON mode. Calling
-    // `should_colorize_env` with `json_mode=true` exercises the same path
-    // documented in `tty.rs` (always returns false). We bind to `_` to make
-    // it grep-evident that we honored the contract; we don't actually use
-    // ANSI styling anywhere in this module (compile-time guarantee).
-    let _color_ignored = tty::should_colorize_env(color_flag, true);
-
+    // WR-06: the prior `let _color_ignored = tty::should_colorize_env(...)`
+    // binding has been removed. `should_colorize_env(_, true)` is documented
+    // to always return `false`, so calling it with `json_mode=true` was a
+    // no-op whose return value was already discarded. The "documents the
+    // contract at the call site" intent now lives in this comment (and the
+    // fn's `# Errors` doc above): D-58 is satisfied by the structural fact
+    // that NO `owo_colors` / ANSI emission exists in this module, not by a
+    // runtime call.
     let root = to_json_root(&results, now);
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(&mut stdout, &root)
