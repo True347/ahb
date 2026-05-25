@@ -147,7 +147,7 @@ mod tests {
     fn engine_with_mock_enabled_has_count_one() {
         let cfg = Config {
             providers: Providers {
-                mock: ProviderConfig { enabled: true },
+                mock: ProviderConfig { enabled: true, ..Default::default() },
                 ..Default::default()
             },
         };
@@ -160,7 +160,7 @@ mod tests {
     async fn engine_refresh_all_against_mock_returns_one_ok_row() {
         let cfg = Config {
             providers: Providers {
-                mock: ProviderConfig { enabled: true },
+                mock: ProviderConfig { enabled: true, ..Default::default() },
                 ..Default::default()
             },
         };
@@ -183,7 +183,7 @@ mod tests {
         // covered by tests/engine_row_order.rs.
         let cfg = Config {
             providers: Providers {
-                mock: ProviderConfig { enabled: true },
+                mock: ProviderConfig { enabled: true, ..Default::default() },
                 ..Default::default()
             },
         };

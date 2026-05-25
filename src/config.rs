@@ -25,14 +25,27 @@ const DEFAULT_CONFIG: &str = include_str!("templates/default-config.toml");
 /// can opt in via config; the default template does NOT mention mock (power-user knob).
 const KNOWN_PROVIDER_KEYS: &[&str] = &["claude", "codex", "gemini", "mock"];
 
-/// Known per-provider keys. Phase 1 only `enabled`. Phase 3 may add
-/// `refresh_interval` / `auth_source` (CFG-03).
-const KNOWN_PROVIDER_FIELD_KEYS: &[&str] = &["enabled"];
+/// Known per-provider keys. Phase 1 added `enabled`; Phase 3 Plan 01 adds
+/// `refresh_interval` (CFG-03 / D-72). Future phases may add `auth_source`.
+const KNOWN_PROVIDER_FIELD_KEYS: &[&str] = &["enabled", "refresh_interval"];
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ProviderConfig {
     #[serde(default)]
     pub enabled: bool,
+    /// Per-provider refresh interval in **seconds** (D-72 / CFG-03). `None` means
+    /// "absent from config → use this provider's `DEFAULT_REFRESH_INTERVAL_SECS`".
+    ///
+    /// Parsing semantics:
+    /// - `u64` matches `Duration::from_secs(u64)`; negative TOML integers are
+    ///   rejected automatically by serde's u64 deserialization.
+    /// - The parse layer is a pure DTO: it accepts any valid u64 (including 0)
+    ///   without clamping. The ≥5s safety floor (D-72) is enforced inside
+    ///   `Engine::new` (Plan 02), which also emits `tracing::warn!` on clamp.
+    /// - No upper bound (D-72 "上限不設"); users may set values like 600s or
+    ///   24h for slow-changing providers.
+    #[serde(default)]
+    pub refresh_interval: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

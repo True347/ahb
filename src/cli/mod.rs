@@ -330,7 +330,7 @@ mod tests {
     async fn run_compact_with_mock_provider_succeeds() {
         let cfg = Config {
             providers: Providers {
-                mock: ProviderConfig { enabled: true },
+                mock: ProviderConfig { enabled: true, ..Default::default() },
                 ..Default::default()
             },
         };
@@ -354,7 +354,7 @@ mod tests {
     async fn run_detailed_with_mock_provider_succeeds() {
         let cfg = Config {
             providers: Providers {
-                mock: ProviderConfig { enabled: true },
+                mock: ProviderConfig { enabled: true, ..Default::default() },
                 ..Default::default()
             },
         };

@@ -67,8 +67,8 @@ async fn engine_refresh_all_returns_canonical_order_with_claude_and_mock_enabled
     //    them all disabled; we override directly.
     let cfg = Config {
         providers: Providers {
-            claude: ProviderConfig { enabled: true },
-            mock: ProviderConfig { enabled: true },
+            claude: ProviderConfig { enabled: true, ..Default::default() },
+            mock: ProviderConfig { enabled: true, ..Default::default() },
             ..Default::default()
         },
     };
