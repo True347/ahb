@@ -25,11 +25,16 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Widget};
 
-use crate::cli::render_text::{filled_cells, format_countdown, id_label, id_label_titlecase};
+use crate::cli::render_text::{
+    filled_cells, format_countdown, id_label, id_label_titlecase, BAR_WIDTH,
+};
 use crate::tui::app::RowState;
 
-/// Phase 0 D-16 — fixed bar width for horizontal alignment.
-const BAR_WIDTH: usize = 10;
+// WR-04: `BAR_WIDTH` was duplicated here (`const BAR_WIDTH: usize = 10;`)
+// and the CLI module published `pub const BAR_WIDTH` already. Two copies
+// meant a future bump in one location (e.g. for a wider snapshot) would
+// silently desync the CLI and TUI bar lengths with no compile error.
+// Single source of truth now lives in `cli::render_text`.
 
 /// Render one provider row into the buffer area. TUI always uses Unicode (the CLI's
 /// `--ascii` flag does NOT apply — TUI is always a TTY, always Unicode; module note).
