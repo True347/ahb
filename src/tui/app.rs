@@ -16,9 +16,10 @@
 
 use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 
+use crate::engine::cache::RowOutcome;
 use crate::model::{ProviderError, ProviderId, ProviderState};
 
-/// One UI row, derived from one provider's `Result<ProviderState, ProviderError>`.
+/// One UI row, derived from one provider's `RowOutcome` (Phase 3 Plan 03-03).
 #[derive(Debug)]
 pub enum RowState {
     /// Healthy row — render the HP bar.
@@ -28,6 +29,14 @@ pub enum RowState {
     SchemaDrift { id: ProviderId },
     /// Other adapter error — render `{label}  ERROR: {message}` (UI-SPEC LOCKED).
     Err { id: ProviderId, message: String },
+    /// Last fetch failed transiently; serving cached data. Rendered as a yellow bar
+    /// with `(stale Ns ago)` suffix per D-69. `stale_age_secs` is pre-computed by
+    /// Engine (in `RowOutcome::Stale`) so the renderer never touches wall clock
+    /// (BL-01 invariant under `src/tui/widgets/`).
+    StaleOk {
+        state: ProviderState,
+        stale_age_secs: u64,
+    },
 }
 
 /// Cached TUI state. Updated by `apply_results` once per fetch tick; consumed by
@@ -58,18 +67,35 @@ impl AppState {
         }
     }
 
-    /// Replace the cached rows from one engine fetch. Phase 1 has at most 3 providers,
+    /// Replace the cached rows from one engine fetch. Phase 1 had at most 3 providers,
     /// so the full replacement is cheaper than diffing.
-    pub fn apply_results(
-        &mut self,
-        results: Vec<(ProviderId, Result<ProviderState, ProviderError>)>,
-    ) {
+    ///
+    /// Phase 3 Plan 03-03: input is now `Vec<(ProviderId, RowOutcome)>` from
+    /// `Engine::refresh_all`. Translation table (RESEARCH Q5):
+    ///
+    /// | `RowOutcome`                            | `RowState`                                |
+    /// |-----------------------------------------|-------------------------------------------|
+    /// | `Fresh(state)`                          | `Ok(state)`                               |
+    /// | `Stale { state, stale_age_secs }`       | `StaleOk { state, stale_age_secs }`       |
+    /// | `Failed(SchemaDrift { .. })`            | `SchemaDrift { id }`                      |
+    /// | `Failed(other)`                         | `Err { id, message }`                     |
+    ///
+    /// `stale_age_secs` is pre-computed by the engine (single source of wall-clock
+    /// math); this translator passes it through verbatim. BL-01 invariant: no
+    /// `jiff::Timestamp::now()` call here.
+    pub fn apply_results(&mut self, results: Vec<(ProviderId, RowOutcome)>) {
         self.rows = results
             .into_iter()
-            .map(|(id, result)| match result {
-                Ok(state) => RowState::Ok(state),
-                Err(ProviderError::SchemaDrift { .. }) => RowState::SchemaDrift { id },
-                Err(other) => RowState::Err {
+            .map(|(id, outcome)| match outcome {
+                RowOutcome::Fresh(state) => RowState::Ok(state),
+                RowOutcome::Stale { state, stale_age_secs } => RowState::StaleOk {
+                    state,
+                    stale_age_secs,
+                },
+                RowOutcome::Failed(ProviderError::SchemaDrift { .. }) => {
+                    RowState::SchemaDrift { id }
+                }
+                RowOutcome::Failed(other) => RowState::Err {
                     id,
                     message: other.to_string(),
                 },

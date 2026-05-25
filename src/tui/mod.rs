@@ -60,8 +60,6 @@ use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::EventStream;
 
 use crate::engine::Engine;
-use crate::engine::cache::RowOutcome;
-use crate::model::{ProviderError, ProviderId, ProviderState};
 
 pub mod app;
 pub mod ui;
@@ -110,24 +108,11 @@ async fn tui_loop(terminal: &mut DefaultTerminal, engine: Engine) -> anyhow::Res
     let mut app = app::AppState::new(jiff::Timestamp::now());
 
     // Prime the cache so the first frame is not empty. The 1s render tick fires shortly
-    // after — the user sees real data immediately.
+    // after — the user sees real data immediately. Plan 03-03 wired
+    // AppState::apply_results to consume RowOutcome directly (RowOutcome::Stale →
+    // RowState::StaleOk yellow row + (stale Ns ago) suffix per D-69).
     let outcomes = engine.refresh_all(jiff::Timestamp::now()).await;
-    // SCAFFOLD: removed in Plan 03-03 when apply_results is updated to accept
-    // RowOutcome directly. Until then, collapse RowOutcome → legacy
-    // Result<ProviderState, ProviderError> shape so AppState::apply_results
-    // (Phase 1/2 signature) keeps compiling. Both Fresh and Stale map to
-    // Ok(state); Failed maps to Err. Stale rendering (yellow row +
-    // "(stale Ns ago)" suffix) is wired in Plan 03-03 — until then the TUI
-    // shows a normal Ok row for stale data (no visible regression vs Phase 2
-    // because there was no cache layer before).
-    let legacy: Vec<(ProviderId, Result<ProviderState, ProviderError>)> = outcomes
-        .into_iter()
-        .map(|(id, outcome)| match outcome {
-            RowOutcome::Fresh(state) | RowOutcome::Stale { state, .. } => (id, Ok(state)),
-            RowOutcome::Failed(err) => (id, Err(err)),
-        })
-        .collect();
-    app.apply_results(legacy);
+    app.apply_results(outcomes);
     // IN-01 fix: refresh app.now immediately before the priming draw so the first
     // rendered frame is not seeded with the pre-prime timestamp (the prime fetch can
     // take up to DEFAULT_PER_PROVIDER_TIMEOUT). The render-tick arm below already
@@ -159,19 +144,14 @@ async fn tui_loop(terminal: &mut DefaultTerminal, engine: Engine) -> anyhow::Res
                 }
             }
             _ = fetch_tick.tick() => {
+                // Plan 03-03: RowOutcome passes straight through to apply_results;
+                // the translator inside AppState routes Fresh → Ok, Stale → StaleOk
+                // (yellow row + "(stale Ns ago)" suffix per D-69), Failed → Err /
+                // SchemaDrift. D-74 invariant: this `tokio::time::interval(15s)`
+                // is the global tick — per-provider rate limiting is handled inside
+                // Engine::refresh_all via the refresh_intervals map (Plan 03-01).
                 let outcomes = engine.refresh_all(jiff::Timestamp::now()).await;
-                // SCAFFOLD: removed in Plan 03-03 when apply_results is updated
-                // to accept RowOutcome directly (matches the priming adapter
-                // above). Plan 03-03 will replace this whole block with a direct
-                // `app.apply_results(outcomes)` once RowState::StaleOk lands.
-                let legacy: Vec<(ProviderId, Result<ProviderState, ProviderError>)> = outcomes
-                    .into_iter()
-                    .map(|(id, outcome)| match outcome {
-                        RowOutcome::Fresh(state) | RowOutcome::Stale { state, .. } => (id, Ok(state)),
-                        RowOutcome::Failed(err) => (id, Err(err)),
-                    })
-                    .collect();
-                app.apply_results(legacy);
+                app.apply_results(outcomes);
             }
             _ = render_tick.tick() => {
                 // BL-01: render-tick arm is the SINGLE authorized wall-clock site in

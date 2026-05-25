@@ -68,6 +68,9 @@ pub fn build_line(row: &RowState, now: &jiff::Timestamp) -> Line<'static> {
         RowState::Ok(state) => build_ok_line(state, now),
         RowState::SchemaDrift { id } => build_schema_drift_line(*id),
         RowState::Err { id, message } => build_err_line(*id, message),
+        RowState::StaleOk { state, stale_age_secs } => {
+            build_stale_ok_line(state, *stale_age_secs, now)
+        }
     }
 }
 
@@ -100,6 +103,53 @@ fn build_ok_line(state: &crate::model::ProviderState, now: &jiff::Timestamp) -> 
         Span::raw(format!(" {pct_int}% ")),
         Span::styled("\u{2022}", Style::default().fg(Color::DarkGray)),
         Span::raw(format!(" resets in {countdown}")),
+    ])
+}
+
+/// Build a stale-fallback row: same layout as `build_ok_line` but ALL styled spans
+/// use `Color::Yellow` and the line ends with `  (stale Ns ago)` per D-69.
+///
+/// Per RESEARCH Q6: build each `Span` with `Style::default().fg(Color::Yellow)`
+/// directly — ratatui 0.30 per-Span style takes precedence over Paragraph base
+/// style, so wrapping `build_ok_line`'s output would require overriding each
+/// span after the fact (fragile). This function is a sibling of `build_ok_line`,
+/// not a wrapper.
+///
+/// `stale_age_secs` is pre-computed by the engine; this widget MUST NOT call
+/// `jiff::Timestamp::now()` (BL-01, enforced by `tests/no_walltime_in_adapter.rs`).
+fn build_stale_ok_line(
+    state: &crate::model::ProviderState,
+    stale_age_secs: u64,
+    now: &jiff::Timestamp,
+) -> Line<'static> {
+    // Defensive guard mirrors build_ok_line — empty windows is a contract
+    // violation; degrade to an ERROR row rather than panic.
+    if state.windows.is_empty() {
+        return build_err_line(state.id, "(no windows in ProviderState)");
+    }
+    let w = &state.windows[0];
+    let pct = w.percent_remaining.clamp(0.0, 100.0);
+    let filled = filled_cells(pct);
+    let empty = BAR_WIDTH - filled;
+
+    let label = id_label(state.id);
+    let countdown = format_countdown(now, &w.reset.resets_at);
+    let pct_int = pct_int(pct);
+
+    Line::from(vec![
+        Span::raw(format!("{label}  ")),
+        // D-69: ALL styled spans use Color::Yellow (override the percent-threshold
+        // accent so the row is visually distinct from a healthy Ok row).
+        Span::styled("\u{2588}".repeat(filled), Style::default().fg(Color::Yellow)),
+        Span::styled("\u{2591}".repeat(empty), Style::default().fg(Color::Yellow)),
+        Span::raw(format!(" {pct_int}% ")),
+        Span::styled("\u{2022}", Style::default().fg(Color::Yellow)),
+        Span::raw(format!(" resets in {countdown}")),
+        // D-69: two spaces before `(stale Ns ago)` suffix. Suffix is raw (unstyled)
+        // — clear text doesn't need color treatment; the bar color already signals
+        // staleness, and machine consumers can grep "(stale " out of any rendering.
+        Span::raw("  "),
+        Span::raw(format!("(stale {stale_age_secs}s ago)")),
     ])
 }
 
