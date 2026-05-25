@@ -101,7 +101,19 @@ Plans:
   3. `AHB --json` emits a JSON document with `schema_version: 1` that round-trips cleanly through `jq` (no ANSI bytes, no escape leakage) and is consumable by tmux / Starship / shell pipelines; a CI grep test asserts no secret-shaped strings ever appear in `--json` output regardless of input.
   4. Documented exit codes work: `0` when ≥1 provider succeeded, `1` when all providers failed, `2` when config or secrets are unloadable — verified by integration tests for each path; `--help` documents them and `NO_COLOR` env + `--color=auto|always|never` flag are both honored.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Codex adapter (rusqlite + JSONL + SchemaDrift sentinel generalization) end-to-end so `AHB` shows codex alongside claude in compact mode (ADP-04) [wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — `--detailed` slice: Claude weekly window const + ISO-Monday-local anchor + `detailed_block` renderer + `run_detailed` dispatch + integration test (CORE-03) [wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-03-PLAN.md — `--json schema_version:1` + clap ArgGroup (compact/detailed/json) + exit-code wiring (D-59) + after_help docs + SEC-03 JSON grep test extension (CORE-02 / CORE-04 / CORE-06 / SEC-03) [wave 3]
 
 ### Phase 3: Gemini (conditional) + Cache & Refresh Policy
 
@@ -142,7 +154,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 |-------|----------------|--------|-----------|
 | 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
 | 1. Engine + Claude + TUI Scaffold | 4/4 | Complete   | 2026-05-23 |
-| 2. Codex + Output Formats | 0/TBD | Not started | - |
+| 2. Codex + Output Formats | 0/3 | Not started | - |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 0/TBD | Not started | - |
 | 4. Distribution & Release Polish | 0/TBD | Not started | - |
 
