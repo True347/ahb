@@ -98,7 +98,8 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{HpWindow, ResetInfo};
+    use crate::engine::cache::RowOutcome;
+    use crate::model::{HpWindow, NetworkErr, ResetInfo};
     use ratatui::crossterm::event::KeyEventKind;
     use std::borrow::Cow;
 
@@ -124,16 +125,19 @@ mod tests {
 
     #[test]
     fn apply_results_translates_ok_schema_drift_and_err() {
+        // Phase 3 Plan 03-03: input shape is now Vec<(ProviderId, RowOutcome)>.
+        // SchemaDrift / other Failed errors still route to SchemaDrift / Err
+        // RowState variants (Phase 1 behavior preserved).
         let mut app = AppState::new(fixture_now());
         let results = vec![
-            (ProviderId::Claude, Ok(make_state(60.0))),
+            (ProviderId::Claude, RowOutcome::Fresh(make_state(60.0))),
             (
                 ProviderId::Codex,
-                Err(ProviderError::SchemaDrift { missing: vec!["x".into()] }),
+                RowOutcome::Failed(ProviderError::SchemaDrift { missing: vec!["x".into()] }),
             ),
             (
                 ProviderId::Gemini,
-                Err(ProviderError::Unavailable { reason: "boom?".into() }),
+                RowOutcome::Failed(ProviderError::Unavailable { reason: "boom?".into() }),
             ),
         ];
         app.apply_results(results);
@@ -149,6 +153,97 @@ mod tests {
                 assert!(message.contains("boom?"), "msg: {message}");
             }
             other => panic!("expected Err row, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn apply_results_translates_fresh_to_ok() {
+        let mut app = AppState::new(fixture_now());
+        let results = vec![(ProviderId::Claude, RowOutcome::Fresh(make_state(75.0)))];
+        app.apply_results(results);
+        assert_eq!(app.rows.len(), 1);
+        match &app.rows[0] {
+            RowState::Ok(state) => assert_eq!(state.id, ProviderId::Mock),
+            other => panic!("expected Ok, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn apply_results_translates_stale_to_stale_ok() {
+        let mut app = AppState::new(fixture_now());
+        let results = vec![(
+            ProviderId::Claude,
+            RowOutcome::Stale {
+                state: make_state(60.0),
+                stale_age_secs: 47,
+            },
+        )];
+        app.apply_results(results);
+        assert_eq!(app.rows.len(), 1);
+        match &app.rows[0] {
+            RowState::StaleOk { state, stale_age_secs } => {
+                assert_eq!(state.id, ProviderId::Mock);
+                assert_eq!(*stale_age_secs, 47);
+            }
+            other => panic!("expected StaleOk, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn apply_results_passes_stale_age_secs_unchanged() {
+        // stale_age_secs = 0, 15, 3600 — all pass through as-is (the engine
+        // pre-computed it; AppState is a dumb translator).
+        for secs in [0u64, 15, 3600] {
+            let mut app = AppState::new(fixture_now());
+            let results = vec![(
+                ProviderId::Codex,
+                RowOutcome::Stale {
+                    state: make_state(50.0),
+                    stale_age_secs: secs,
+                },
+            )];
+            app.apply_results(results);
+            match &app.rows[0] {
+                RowState::StaleOk { stale_age_secs, .. } => {
+                    assert_eq!(*stale_age_secs, secs);
+                }
+                other => panic!("expected StaleOk(secs={secs}), got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn apply_results_translates_schema_drift_to_schema_drift() {
+        let mut app = AppState::new(fixture_now());
+        let results = vec![(
+            ProviderId::Codex,
+            RowOutcome::Failed(ProviderError::SchemaDrift { missing: vec!["x".into()] }),
+        )];
+        app.apply_results(results);
+        assert!(matches!(
+            app.rows[0],
+            RowState::SchemaDrift { id: ProviderId::Codex }
+        ));
+    }
+
+    #[test]
+    fn apply_results_translates_other_failed_to_err() {
+        // Network is a transient error but the engine only emits Failed(Network)
+        // when there's no cache to fall back to — TUI then renders ERROR row.
+        let mut app = AppState::new(fixture_now());
+        let results = vec![(
+            ProviderId::Gemini,
+            RowOutcome::Failed(ProviderError::Network {
+                source: NetworkErr("offline".into()),
+            }),
+        )];
+        app.apply_results(results);
+        match &app.rows[0] {
+            RowState::Err { id, message } => {
+                assert_eq!(*id, ProviderId::Gemini);
+                assert!(message.contains("offline"), "msg: {message}");
+            }
+            other => panic!("expected Err, got {other:?}"),
         }
     }
 

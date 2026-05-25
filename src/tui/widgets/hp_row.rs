@@ -285,4 +285,90 @@ mod tests {
     fn schema_drift_variant_constructs() {
         let _ = ProviderError::SchemaDrift { missing: vec!["x".into()] };
     }
+
+    fn stale_ok_row(pct: f32, stale_age_secs: u64) -> RowState {
+        let now = fixture_now();
+        RowState::StaleOk {
+            state: ProviderState {
+                id: ProviderId::Claude,
+                windows: vec![HpWindow {
+                    label: Cow::Borrowed("claude"),
+                    percent_remaining: pct,
+                    reset: ResetInfo { resets_at: now + jiff::Span::new().hours(4) },
+                    bar_color: None,
+                    detailed_label: None,
+                }],
+                fetched_at: now,
+                source: Cow::Borrowed("claude-jsonl"),
+            },
+            stale_age_secs,
+        }
+    }
+
+    #[test]
+    fn build_stale_ok_line_uses_yellow_for_all_spans() {
+        // D-69 + RESEARCH Q6: every styled Span uses Color::Yellow (no Green / Red /
+        // DarkGray accent mixing).
+        let line = build_line(&stale_ok_row(60.0, 32), &fixture_now());
+        for span in &line.spans {
+            if let Some(fg) = span.style.fg {
+                assert_eq!(
+                    fg,
+                    Color::Yellow,
+                    "stale row Span style must use Color::Yellow, got {fg:?} on {:?}",
+                    span.content
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn build_stale_ok_line_includes_stale_suffix() {
+        let line = build_line(&stale_ok_row(60.0, 32), &fixture_now());
+        let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            plain.contains("(stale 32s ago)"),
+            "stale suffix missing: {plain}"
+        );
+    }
+
+    #[test]
+    fn build_stale_ok_line_two_spaces_before_suffix() {
+        // D-69: two spaces before the open paren.
+        let line = build_line(&stale_ok_row(60.0, 32), &fixture_now());
+        let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            plain.contains("  (stale"),
+            "should have two spaces before '(stale': {plain}"
+        );
+    }
+
+    #[test]
+    fn build_stale_ok_line_zero_secs() {
+        let line = build_line(&stale_ok_row(60.0, 0), &fixture_now());
+        let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            plain.contains("(stale 0s ago)"),
+            "stale 0s suffix missing: {plain}"
+        );
+    }
+
+    #[test]
+    fn build_line_dispatches_stale_ok_to_stale_line() {
+        // build_line must route RowState::StaleOk through build_stale_ok_line — the
+        // observable signature is the Yellow color + (stale Ns ago) suffix.
+        let line = build_line(&stale_ok_row(60.0, 99), &fixture_now());
+        let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        // Hallmark of stale_line vs ok_line: presence of "(stale " suffix AND
+        // no Green / Red / DarkGray accents.
+        assert!(plain.contains("(stale 99s ago)"), "stale dispatch failed: {plain}");
+        for span in &line.spans {
+            if let Some(fg) = span.style.fg {
+                assert!(
+                    fg == Color::Yellow,
+                    "stale dispatch must override all Span colors to Yellow; saw {fg:?}"
+                );
+            }
+        }
+    }
 }
