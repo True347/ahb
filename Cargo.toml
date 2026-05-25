@@ -89,6 +89,10 @@ keyring-core = "1"
 # (RustCrypto org, canonical pick per RESEARCH Pattern 6).
 zeroize = "1.8"
 
+# Phase 3 — moka stale-on-error cache (D-66, D-67). sync feature only; no TTL set
+# (manual stale semantics per D-71 — moka auto-eviction disabled).
+moka = { version = "0.12", default-features = false, features = ["sync"] }
+
 # Phase 1 Plan 02 — cfg-gated `*-keyring-store` companions for `set_default_store`.
 # Each crate's `repository` was verified on crates.io 2026-05-23 to point under
 # `github.com/open-source-cooperative/*` (same org that publishes `keyring-core`).

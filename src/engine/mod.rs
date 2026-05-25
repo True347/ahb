@@ -13,9 +13,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod cache;
 pub mod events;
 pub mod fanout;
 
+pub use cache::{CacheEntry, RowOutcome};
 pub use events::{EngineEvent, EVENT_BUFFER};
 pub use fanout::DEFAULT_PER_PROVIDER_TIMEOUT;
 
