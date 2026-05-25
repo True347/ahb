@@ -105,7 +105,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Codex adapter (rusqlite + JSONL + SchemaDrift sentinel generalization) end-to-end so `AHB` shows codex alongside claude in compact mode (ADP-04) [wave 1]
+- [x] 02-01-PLAN.md — Codex adapter (rusqlite + JSONL + SchemaDrift sentinel generalization) end-to-end so `AHB` shows codex alongside claude in compact mode (ADP-04) [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

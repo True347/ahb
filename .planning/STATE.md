@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-05-25T02:14:51.546Z"
-last_activity: 2026-05-25 -- Phase 02 planning complete
+last_updated: "2026-05-25T03:11:40.711Z"
+last_activity: 2026-05-25
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 40
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 2 — codex + output formats
+**Current focus:** Phase 02 — codex-output-formats
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (codex-output-formats) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-05-25 -- Phase 02 planning complete
+Last activity: 2026-05-25
 
-Progress: [██████████] 100%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [██████████] 100%
 | Phase 1 P2 | 12min | 2 tasks | 14 files |
 | Phase 01-engine-claude-tui-scaffold P03 | 12min | 2 tasks | 12 files |
 | Phase 01-engine-claude-tui-scaffold P04 P01-04 | 22min | 4 tasks | 10 files |
+| Phase 02-codex-output-formats P01 | 25min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 01-04 BL-03: 5h cluster gap uses jiff::Span::total(Unit::Second) > FIVE_HOURS_SECS strict-greater; three boundary tests lock the contract (4h59m30s, exactly-5h, 5h0m30s)
 - [Phase ?]: Plan 01-04 WR-06: D-41 error path uses config::default_path().ok().map_or_else(...) for cross-OS path display; TODO(future-phase) preserves [secrets].storage = 'file' escape-hatch contract for a future plan
 - [Phase ?]: Plan 01-04 WR-08: run_tui_stub deleted from src/cli/mod.rs; grep gate at 0 hits across src/ and tests/
+- [Phase ?]: Plan 02-01 ADP-04: CodexProvider end-to-end — read-only sqlite (zero SELECT, busy_timeout 250ms) + JSONL rate_limits parse + spawn_blocking narrow wrap
+- [Phase ?]: Plan 02-01 Rule 2 deviation: compact_line row label now sourced from id_label(state.id), not windows[0].label — UI-SPEC line 141 binding; Mock compact flips from 'mock-session  …' to 'mock  …'
+- [Phase ?]: Plan 02-01: SchemaDrift sentinel generalized via id_label_titlecase in BOTH cli/render_text.rs and tui/widgets/hp_row.rs; Claude byte-identical to Phase 1; pre-existing TUI bug (Codex drift falsely claiming 'Claude adapter…') fixed
 
 ### Pending Todos
 
@@ -127,6 +131,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T00:57:22.627Z
+Last session: 2026-05-25T03:11:33.455Z
 Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-codex-output-formats/02-CONTEXT.md
+Resume file: None

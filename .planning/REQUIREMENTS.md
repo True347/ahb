@@ -44,7 +44,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ADP-01**: Adapter 失敗只影響該 provider — 不會讓整個 AHB crash 或 blank（per-adapter timeout + `Vec<Result<...>>` + cache stale fallback）
 - [x] **ADP-02**: Claude Code adapter — 從 `~/.claude/projects/**/*.jsonl` 計算 5h rolling window 用量 + reset 時間（不依賴 stats-cache.json 為 source of truth）
 - [x] **ADP-03**: Claude adapter schema drift sentinel — 當期望欄位大量缺失時顯示「adapter may be out-of-date」警告
-- [ ] **ADP-04**: Codex CLI adapter — read-only 開啟 `~/.codex/state_*.sqlite`（動態 version glob）+ `busy_timeout` + 偏好 append-only JSONL rollouts；`rate_limits: null` 視為 unknown
+- [x] **ADP-04**: Codex CLI adapter — read-only 開啟 `~/.codex/state_*.sqlite`（動態 version glob）+ `busy_timeout` + 偏好 append-only JSONL rollouts；`rate_limits: null` 視為 unknown
 - [ ] **ADP-05**: Gemini CLI adapter — **conditional on Phase 0 spike**。若 spike pass：HTTP 走 `gemini.google.com/usage`（或更安全的 local `gemini /stats` capture），refresh 最少 5min、ETag、daily ceiling、README ToS warning。若 spike fail：stub 在 v2 opt-in flag 後，README 寫明 deferred 原因。
 
 ### Quality & Distribution
@@ -122,7 +122,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADP-01 | Phase 1 | Complete |
 | ADP-02 | Phase 1 | Complete |
 | ADP-03 | Phase 1 | Complete |
-| ADP-04 | Phase 2 | Pending |
+| ADP-04 | Phase 2 | Complete |
 | ADP-05 | Phase 3 | Pending (conditional on Phase 0 spike) |
 | DIST-01 | Phase 4 | Pending |
 | DIST-02 | Phase 4 | Pending |
