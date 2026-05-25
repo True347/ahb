@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 02-codex-output-formats COMPLETE (Plan 02-03 closes Phase 2 — CORE-02 + CORE-04 + CORE-06 + SEC-03 all green; all 4 ROADMAP success criteria verified)
-last_updated: "2026-05-25T05:24:41.047Z"
+status: ready_to_plan
+stopped_at: Phase 02 complete (3/3) — ready to discuss Phase 3
+last_updated: 2026-05-25T06:14:19.941Z
 last_activity: 2026-05-25
 progress:
   total_phases: 5
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 02 — codex-output-formats
+**Current focus:** Phase 3 — gemini (conditional) + cache & refresh policy
 
 ## Current Position
 
-Phase: 02 (codex-output-formats) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 3
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-25
 
 Progress: [██████████] 100%
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 4
+- Total plans completed: 7
 - Average duration: —
 - Total execution time: 0 hours
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 | 3. Gemini + Cache | 0 | — | — |
 | 4. Distribution | 0 | — | — |
 | 01 | 4 | - | - |
+| 02 | 3 | - | - |
 
 **Recent Trend:**
 
