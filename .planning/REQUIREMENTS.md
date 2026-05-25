@@ -28,7 +28,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CFG-01**: TOML config 檔列出要追蹤的 provider 清單，每個 provider 可獨立啟用 / 停用
 - [x] **CFG-02**: Config 檔位於 cross-platform 標準位置（`directories` crate 處理 Linux/macOS/Windows 差異）
-- [ ] **CFG-03**: Config 允許 per-provider 指定 refresh interval、limit 覆寫、auth 來源
+- [x] **CFG-03**: Config 允許 per-provider 指定 refresh interval、limit 覆寫、auth 來源
 - [x] **CFG-04**: 未配置的 provider 自動 skip 不顯示，不算 failure
 
 ### Secrets
@@ -112,7 +112,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TUI-05 | Phase 1 | Complete |
 | CFG-01 | Phase 1 | Complete |
 | CFG-02 | Phase 1 | Complete |
-| CFG-03 | Phase 3 | Pending |
+| CFG-03 | Phase 3 | Complete |
 | CFG-04 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Complete |
 | SEC-02 | Phase 1 | Complete |

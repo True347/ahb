@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-05-25T09:18:04.228Z"
-last_activity: 2026-05-25 -- Phase 3 planning complete
+last_updated: "2026-05-25T11:16:27.176Z"
+last_activity: 2026-05-25
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 60
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 3 — gemini (conditional) + cache & refresh policy
+**Current focus:** Phase 03 — gemini-conditional-cache-refresh-policy
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
+Phase: 03 (gemini-conditional-cache-refresh-policy) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-05-25 -- Phase 3 planning complete
+Last activity: 2026-05-25
 
-Progress: [██████████] 100%
+Progress: [████████░░] 76%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [██████████] 100%
 | Phase 02-codex-output-formats P01 | 25min | 2 tasks | 14 files |
 | Phase 02-codex-output-formats P02 | 12min | 2 tasks | 11 files |
 | Phase 02-codex-output-formats P03 | 18min | 2 tasks | 9 files |
+| Phase Phase 03-gemini-conditional-cache-refresh-policy PP01 | 3min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,9 @@ Recent decisions affecting current work:
 - [Phase 02-codex-output-formats]: Plan 02-03 D-49..D-52 + D-57..D-62: locked v1 JSON wire shape (schema_version=1 + integer epoch generated_at/fetched_at/reset_at + BL-02 providers ordering); clap ArgGroup multiple=false for --compact/--detailed/--json mutual exclusion; DispatchOutcome::{AnySuccess,AllFailed} discriminant + exit_code mapper per D-59/D-60; after_help docs exit codes per D-61; debug_emit_fake_secret_and_exit(as_json: bool) extends SEC-03 grep coverage to --json route per D-62
 - [Phase 02-codex-output-formats]: Plan 02-03 Rule 1 fix: generated_at is serialized as Unix epoch integer via jiff timestamp::second::required (matches Phase 0 fetched_at/resets_at adapter), NOT RFC3339 string. CONTEXT D-50 example showed RFC3339 illustratively but locked RESEARCH DTO uses integer adapter. v1 schema commits to integer epoch; consumers use jq from_unixtime for RFC3339
 - [Phase 02-codex-output-formats]: Plan 02-03 Rule 1 fix: two pre-Phase-2 integration tests (cli_walking_skeleton::ahb_with_broken_claude_config + schema_drift_sentinel) asserted .success() on Claude-only-fails scenarios that are now exit 1 per D-59/D-60. Updated to assert output.status.code()==Some(1). User-visible row + sentinel literal invariants preserved byte-identical
+- [Phase ?]: Plan 03-01: ProviderConfig adds refresh_interval: Option<u64> with #[serde(default)]; KNOWN_PROVIDER_FIELD_KEYS gains 'refresh_interval' so D-38 walker is silent on the new key; clamp ≥5s deliberately deferred to Engine::new (Plan 02) per layered-validation pattern
+- [Phase ?]: Plan 03-01: DEFAULT_REFRESH_INTERVAL_SECS = 15 lives per-provider-module (claude/codex/gemini/mock) not in shared module per D-72; gemini stub value is cosmetic (cache never populated) but kept for parity so Engine::new can import uniformly
+- [Phase ?]: Plan 03-01 Rule 3 deviation: 7 pre-existing ProviderConfig { enabled: true } struct-literals in src/engine + src/cli + tests/engine_row_order got ..Default::default() — minimal fix; ProviderConfig already derived Default
 
 ### Pending Todos
 
@@ -141,6 +145,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T07:34:14.798Z
+Last session: 2026-05-25T11:16:02.299Z
 Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-gemini-conditional-cache-refresh-policy/03-CONTEXT.md
+Resume file: None
