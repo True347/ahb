@@ -1,14 +1,20 @@
-//! Acceptance grep: `jiff::Timestamp::now()` is forbidden under `src/provider/`
-//! AND `src/tui/widgets/`.
+//! Acceptance grep: `jiff::Timestamp::now()` is forbidden under `src/provider/`,
+//! `src/tui/widgets/`, AND `src/engine/`.
 //!
 //! Phase 0 contract: only `src/main.rs`, `src/cli/mod.rs::run_compact`, and
-//! `src/tui/mod.rs::tui_loop` call wall-clock. All adapters and TUI leaf widgets
-//! use injected timestamps (clock-injection rule — Phase 0 + BL-01 Plan 04 extension).
+//! `src/tui/mod.rs::tui_loop` call wall-clock. All adapters, TUI leaf widgets,
+//! AND engine-layer cache logic use injected timestamps (clock-injection rule —
+//! Phase 0 + BL-01 Plan 04 extension + Plan 03-05 extension).
 //!
 //! Plan 04 (BL-01 fix): the scope expanded from `src/provider/` only to BOTH
 //! `src/provider/` AND `src/tui/widgets/`. The render-tick arm in `tui_loop` is the
 //! single authorized wall-clock site for the TUI render path; `AppState.now` is the
 //! data path into the leaf widget. Future agents must NOT re-narrow the scan.
+//!
+//! Phase 3 Plan 02 added cache write logic in `src/engine/mod.rs`. Cache entries
+//! use `state.fetched_at` (already stamped from `FetchCtx::now`) — no new
+//! `Timestamp::now()` calls should appear under `src/engine/`. Plan 03-05
+//! extends this scan defensively per 03-RESEARCH.md § Q8.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,7 +36,13 @@ fn no_timestamp_now_in_provider_or_tui_widgets_subtree() {
     // BL-01 (Plan 04): scan BOTH `src/provider/` AND `src/tui/widgets/`. The
     // `src/tui/mod.rs` callsite remains authorized (tui_loop is the canonical
     // wall-clock site for the TUI render path) and is intentionally NOT scanned.
-    let scan_dirs: [&str; 2] = ["src/provider", "src/tui/widgets"];
+    //
+    // Plan 03-05 extension: also scan `src/engine/`. Phase 3 Plan 02 introduced
+    // cache write logic in `src/engine/mod.rs` (cache entry's `fetched_at` is
+    // sourced from `state.fetched_at`, which itself comes from `FetchCtx::now`).
+    // No `Timestamp::now()` call should appear under `src/engine/` either —
+    // this scan enforces that defensively per 03-RESEARCH.md § Q8.
+    let scan_dirs: [&str; 3] = ["src/provider", "src/tui/widgets", "src/engine"];
 
     let mut rs_files = Vec::new();
     for dir_rel in scan_dirs {
@@ -40,7 +52,7 @@ fn no_timestamp_now_in_provider_or_tui_widgets_subtree() {
 
     assert!(
         !rs_files.is_empty(),
-        "should find rs files under src/provider/ AND src/tui/widgets/"
+        "should find rs files under src/provider/, src/tui/widgets/, AND src/engine/"
     );
 
     let mut offenders: Vec<String> = Vec::new();
