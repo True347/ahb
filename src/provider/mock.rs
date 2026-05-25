@@ -53,6 +53,10 @@ impl Provider for MockProvider {
                 percent_remaining: 60.0,
                 reset: ResetInfo { resets_at },
                 bar_color: None,
+                // Phase 2 D-52 additive: Mock keeps detailed_label = None — the
+                // detailed renderer falls back to `label` ("mock-session") for
+                // the indented per-window row, preserving Phase 0 D-25 intent.
+                detailed_label: None,
             }],
             fetched_at: ctx.now,
             source: Cow::Borrowed("mock"),

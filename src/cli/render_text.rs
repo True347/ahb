@@ -254,6 +254,7 @@ mod tests {
                 percent_remaining: pct,
                 reset: ResetInfo { resets_at },
                 bar_color: None,
+                detailed_label: None,
             }],
             fetched_at: resets_at - jiff::Span::new().hours(2),
             source: Cow::Borrowed("mock"),

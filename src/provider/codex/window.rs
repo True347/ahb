@@ -49,6 +49,12 @@ fn tier_to_window(label: &'static str, tier: &RateLimitTier, line_ts: jiff::Time
         percent_remaining,
         reset: ResetInfo { resets_at },
         bar_color: None,
+        // Phase 2 D-52 additive: Codex passes through the same string for the
+        // detailed-mode row label — `label` is already a meaningful, user-facing
+        // identifier ("primary" / "secondary"). Leaving as None would still
+        // render correctly via the renderer's `unwrap_or(&label)` fallback;
+        // setting it explicitly documents intent and matches Claude's pattern.
+        detailed_label: None,
     }
 }
 

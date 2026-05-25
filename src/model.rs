@@ -46,12 +46,27 @@ pub struct ResetInfo {
 
 /// One reset window. Providers may emit N windows (e.g. Claude's 5h session + weekly).
 /// D-09 locked field set; `bar_color` is a render hint, not a rule.
+///
+/// Phase 2 additive field `detailed_label` (D-52 schema_version policy: additive
+/// non-breaking). When `Some`, the detailed-mode renderer uses this label for the
+/// indented per-window row; the compact renderer continues to use `id_label(id)`
+/// for the row prefix (preserving Phase 0 D-25 MockProvider literal and Phase 1
+/// `^claude  ` compact literal). Set by `ClaudeProvider` to `Some("5h")` /
+/// `Some("weekly")` per the Phase 2 detailed-mode UI contract. Adapters that
+/// don't need a distinct detailed-mode label leave this `None`; the renderer
+/// then falls back to `label`.
+///
+/// `#[serde(skip_serializing_if = "Option::is_none", default)]` keeps the JSON
+/// shape backward compatible: existing consumers that never look at the field
+/// see the exact same JSON as before; new consumers can read it when present.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HpWindow {
     pub label: Cow<'static, str>,
     pub percent_remaining: HpUnit,
     pub reset: ResetInfo,
     pub bar_color: Option<BarColor>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub detailed_label: Option<Cow<'static, str>>,
 }
 
 /// What a single `Provider::fetch` returns (D-08).
@@ -165,6 +180,7 @@ mod tests {
                 percent_remaining: 60.0,
                 reset: ResetInfo { resets_at },
                 bar_color: None,
+                detailed_label: None,
             }],
             fetched_at: now,
             source: Cow::Borrowed("mock"),
@@ -247,5 +263,51 @@ mod tests {
         let json = serde_json::to_string(&r).unwrap();
         let back: ResetInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(r.resets_at, back.resets_at);
+    }
+
+    // Phase 2 Test M1: when `detailed_label` is `None`, it must NOT appear in the
+    // serialized JSON (per `#[serde(skip_serializing_if = "Option::is_none")]`).
+    // Round-trip yields `None` again (per `#[serde(default)]`).
+    #[test]
+    fn hp_window_detailed_label_none_is_omitted_from_json() {
+        let resets_at: jiff::Timestamp = "2026-05-22T14:00:00Z".parse().unwrap();
+        let w = HpWindow {
+            label: Cow::Borrowed("mock-session"),
+            percent_remaining: 60.0,
+            reset: ResetInfo { resets_at },
+            bar_color: None,
+            detailed_label: None,
+        };
+        let json = serde_json::to_string(&w).unwrap();
+        assert!(
+            !json.contains("detailed_label"),
+            "detailed_label = None must be omitted from JSON, got: {json}"
+        );
+        let back: HpWindow = serde_json::from_str(&json).unwrap();
+        assert!(
+            back.detailed_label.is_none(),
+            "deserialized detailed_label should be None for backward-compat shape"
+        );
+    }
+
+    // Phase 2 Test M2: when `detailed_label` is `Some`, the serialized JSON contains
+    // the field and deserialization recovers the value.
+    #[test]
+    fn hp_window_detailed_label_some_round_trips() {
+        let resets_at: jiff::Timestamp = "2026-05-22T14:00:00Z".parse().unwrap();
+        let w = HpWindow {
+            label: Cow::Borrowed("claude"),
+            percent_remaining: 90.0,
+            reset: ResetInfo { resets_at },
+            bar_color: None,
+            detailed_label: Some(Cow::Borrowed("5h")),
+        };
+        let json = serde_json::to_string(&w).unwrap();
+        assert!(
+            json.contains("\"detailed_label\":\"5h\""),
+            "expected detailed_label = '5h' in JSON, got: {json}"
+        );
+        let back: HpWindow = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.detailed_label.as_deref(), Some("5h"));
     }
 }

@@ -154,6 +154,7 @@ mod tests {
                         resets_at: ctx.now + jiff::Span::new().hours(1),
                     },
                     bar_color: None,
+                    detailed_label: None,
                 }],
                 fetched_at: ctx.now,
                 source: Cow::Borrowed("test-ok"),

@@ -107,21 +107,35 @@ impl Provider for ClaudeProvider {
             });
         };
         let pct = window::percent_remaining(cluster.used_tokens, self.token_limit);
-        // UI-SPEC LOCKED: row labels use the provider id (snake_case) so the multi-
-        // provider compact view aligns cleanly (UI-SPEC example shows `claude`,
-        // not `claude-5h`). The "-5h" window-suffix will reappear in Phase 2's
-        // `--detailed` mode where multiple windows per provider are rendered.
-        let win = HpWindow {
+        // UI-SPEC LOCKED: `label` stays "claude" because the compact-mode
+        // renderer's row prefix comes from `id_label(state.id)` (Phase 2 Plan
+        // 02-01 [Rule 2] binding) — keeping `label="claude"` preserves Phase 1
+        // model-layer invariants and any consumer that historically read
+        // `windows[0].label` (the JSON shape was additive only). The Phase 2
+        // `--detailed` view reads `detailed_label.as_deref().unwrap_or(&label)`
+        // and the override `Some("5h")` here is what surfaces in the indented
+        // per-window row.
+        let win_5h = HpWindow {
             label: Cow::Borrowed("claude"),
             percent_remaining: pct,
             reset: ResetInfo {
                 resets_at: cluster.reset_at,
             },
             bar_color: None,
+            detailed_label: Some(Cow::Borrowed("5h")),
         };
+        // Phase 2 D-54: same JSONL scan pass also computes the weekly window
+        // (`label="weekly"` + `detailed_label=Some("weekly")` + NaN sentinel
+        // when `CLAUDE_WEEKLY_TOKEN_LIMIT` is None). Passthrough order is
+        // `[5h, weekly]` per D-55 (Phase 2 adapter passthrough rule).
+        let weekly = window::compute_weekly_window(&merged, ctx.now);
+        let mut windows = vec![win_5h];
+        if let Some(w) = weekly {
+            windows.push(w);
+        }
         Ok(ProviderState {
             id: ProviderId::Claude,
-            windows: vec![win],
+            windows,
             fetched_at: ctx.now,
             source: Cow::Borrowed("claude-jsonl"),
         })
@@ -157,10 +171,15 @@ mod tests {
 
         let state = provider.fetch(&ctx).await.unwrap();
         assert_eq!(state.id, ProviderId::Claude);
-        assert_eq!(state.windows.len(), 1);
+        // Phase 2 D-54: ClaudeProvider now emits TWO windows in passthrough order
+        // `[5h, weekly]`. Phase 1's `windows.len() == 1` invariant is replaced
+        // with `== 2`; `windows[0]` continues to carry the 5h signal byte-
+        // identical to Phase 1 (compact mode unaffected — see the dedicated
+        // `compact_prefix_preserves_phase1_literal` test below).
+        assert_eq!(state.windows.len(), 2);
         assert_eq!(state.source, "claude-jsonl");
         assert_eq!(state.fetched_at, now);
-        // Single cluster, 4400 used out of 44000 → 90% remaining
+        // Single cluster, 4400 used out of 44000 → 90% remaining (windows[0] = 5h).
         assert!(
             (state.windows[0].percent_remaining - 90.0).abs() < 0.01,
             "expected ~90% remaining, got {}",
@@ -169,7 +188,48 @@ mod tests {
         // session_start = 11:00 → reset_at = 16:00
         let expected_reset: jiff::Timestamp = "2026-05-23T16:00:00Z".parse().unwrap();
         assert_eq!(state.windows[0].reset.resets_at, expected_reset);
+        // Phase 1 invariant PRESERVED: windows[0].label is still "claude".
         assert_eq!(state.windows[0].label, "claude");
+        // Phase 2 D-54 additive: windows[0] gets a per-row detailed override.
+        assert_eq!(state.windows[0].detailed_label.as_deref(), Some("5h"));
+        // Phase 2 D-54 additive: windows[1] is the weekly window with NaN sentinel
+        // (because CLAUDE_WEEKLY_TOKEN_LIMIT is None in Phase 2).
+        assert_eq!(state.windows[1].label, "weekly");
+        assert_eq!(state.windows[1].detailed_label.as_deref(), Some("weekly"));
+        assert!(
+            state.windows[1].percent_remaining.is_nan(),
+            "weekly window must be NaN when limit is None, got {}",
+            state.windows[1].percent_remaining
+        );
+    }
+
+    /// Phase 2 C2: build a `ProviderState` matching what `ClaudeProvider::fetch`
+    /// emits today and confirm the compact renderer still produces a string
+    /// starting with the byte-identical Phase 1 LOCKED prefix `claude  ` — this
+    /// pins the invariant that `compact_line` reads `id_label(state.id)` (NOT
+    /// `windows[0].label` or `windows[0].detailed_label`), so Plan 02-02 Task 2's
+    /// addition of `detailed_label` cannot silently regress the compact view.
+    #[tokio::test]
+    async fn compact_prefix_preserves_phase1_literal() {
+        let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
+        let resets_at = now + jiff::Span::new().hours(2);
+        let state = ProviderState {
+            id: ProviderId::Claude,
+            windows: vec![HpWindow {
+                label: Cow::Borrowed("claude"),
+                percent_remaining: 60.0,
+                reset: ResetInfo { resets_at },
+                bar_color: None,
+                detailed_label: Some(Cow::Borrowed("5h")),
+            }],
+            fetched_at: now,
+            source: Cow::Borrowed("claude-jsonl"),
+        };
+        let line = crate::cli::render_text::compact_line(&state, &now, true);
+        assert!(
+            line.starts_with("claude  "),
+            "compact line must start with byte-identical Phase 1 LOCKED prefix `claude  `, got: {line:?}"
+        );
     }
 
     #[tokio::test]
