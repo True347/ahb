@@ -30,6 +30,14 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
     pub color: ColorMode,
 
+    /// Phase 2 D-53 / CORE-03: print a multi-line block per provider with header
+    /// + indented per-window rows (Claude shows both 5h and weekly bars). When
+    /// absent, the default compact one-line view applies. Plan 02-03 will add
+    /// the full `--compact / --detailed / --json` ArgGroup interlock; in Plan
+    /// 02-02 the flag lives in isolation with NO `conflicts_with` attribute.
+    #[arg(long)]
+    pub detailed: bool,
+
     /// D-43 integration tier: debug-build-only fake-secret emitter for
     /// `tests/secret_leak_subprocess.rs`. NOT compiled into release builds —
     /// SEC-03 covers `--json` emission paths in Phase 2 CORE-04. `hide = true`
@@ -86,6 +94,65 @@ pub async fn run_compact(
                 let line = render_text::format_error_row_colored(id, &err, ascii, color_on);
                 println!("{line}");
             }
+        }
+    }
+    Ok(())
+}
+
+/// Render the Phase 2 `--detailed` view (D-53 / CORE-03). Per provider: one
+/// header line (`id_label`) followed by one indented row per `HpWindow`
+/// (2-space indent, shared compact-mode bar styling per D-56). Provider blocks
+/// are separated by a single blank line; the last block does NOT trail an
+/// empty line (CONTEXT D-53 specifics line 341 — "末行不額外空行").
+///
+/// `--ascii` (from `cli.ascii`) switches the glyphs per D-58 (silently honored).
+/// `--color=never` short-circuits `should_colorize_env` to `false`, producing
+/// zero ANSI bytes in stdout.
+///
+/// # Errors
+///
+/// Currently infallible (returns `Ok(())` on every path) — typed as
+/// `anyhow::Result<()>` for future-compat with Plan 02-03's exit-code wiring.
+pub async fn run_detailed(
+    engine: &Engine,
+    ascii: bool,
+    color_flag: ColorMode,
+) -> anyhow::Result<()> {
+    let now = jiff::Timestamp::now();
+    let results = engine.refresh_all(now).await;
+
+    if results.is_empty() {
+        // Empty-state mirrors compact (Phase 1 LOCKED literal — shared with
+        // `run_compact`). Detailed and compact agree here so a tmux user
+        // switching modes doesn't see different empty-state copy.
+        println!("{}", render_text::EMPTY_STATE_HEADING);
+        println!("{}", render_text::EMPTY_STATE_BODY);
+        return Ok(());
+    }
+
+    let color_on = tty::should_colorize_env(color_flag, false);
+    let last_idx = results.len() - 1;
+    for (i, (id, result)) in results.into_iter().enumerate() {
+        match result {
+            Ok(state) => {
+                println!(
+                    "{}",
+                    render_text::detailed_block(&state, &now, ascii, color_on)
+                );
+            }
+            Err(err) => {
+                // Detailed error rendering per D-53: header line + 1 indented
+                // row reusing the existing format_error_row_colored sentinel
+                // (covers SchemaDrift `▒▒▒▒▒▒▒▒▒▒ ??% • {Label} adapter…`
+                // AND Unavailable / Network / etc. `{label}  ERROR: …`).
+                let row = render_text::format_error_row_colored(id, &err, ascii, color_on);
+                println!("{}", render_text::id_label(id));
+                println!("  {row}");
+            }
+        }
+        // Provider separator: blank line between blocks, NONE after the last.
+        if i < last_idx {
+            println!();
         }
     }
     Ok(())
@@ -161,6 +228,30 @@ mod tests {
         };
         let engine = Engine::new(cfg, Secrets::default());
         let result = run_compact(&engine, false, ColorMode::Never).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn run_detailed_with_empty_engine_prints_empty_state() {
+        // Same shape as `run_compact_with_empty_engine_prints_empty_state` — confirms
+        // the detailed dispatch path is wired and infallible.
+        let engine = Engine::new(Config::default(), Secrets::default());
+        let result = run_detailed(&engine, false, ColorMode::Never).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn run_detailed_with_mock_provider_succeeds() {
+        let cfg = Config {
+            providers: Providers {
+                mock: ProviderConfig { enabled: true },
+                ..Default::default()
+            },
+        };
+        let engine = Engine::new(cfg, Secrets::default());
+        let result = run_detailed(&engine, false, ColorMode::Never).await;
         assert!(result.is_ok());
     }
 }

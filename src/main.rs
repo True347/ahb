@@ -89,7 +89,18 @@ async fn main() -> anyhow::Result<()> {
     let engine = Engine::new(cfg, secrets);
 
     match cli.command {
-        None => ahb::cli::run_compact(&engine, cli.ascii, cli.color).await,
         Some(Command::Tui) => ahb::tui::run(engine).await,
+        None => {
+            // Phase 2 D-53 / CORE-03: `--detailed` selects the multi-line
+            // per-provider block view. Plan 02-03 will introduce the full
+            // `--compact / --detailed / --json` clap ArgGroup; in Plan 02-02
+            // the flag stands alone and the no-flag default stays compact
+            // (byte-identical to Phase 1).
+            if cli.detailed {
+                ahb::cli::run_detailed(&engine, cli.ascii, cli.color).await
+            } else {
+                ahb::cli::run_compact(&engine, cli.ascii, cli.color).await
+            }
+        }
     }
 }

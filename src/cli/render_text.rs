@@ -23,7 +23,7 @@
 
 use owo_colors::OwoColorize;
 
-use crate::model::{ProviderError, ProviderId, ProviderState};
+use crate::model::{HpWindow, ProviderError, ProviderId, ProviderState};
 
 /// CONTEXT D-16 -- fixed bar width for snapshot stability + multi-provider alignment in compact mode.
 pub const BAR_WIDTH: usize = 10;
@@ -238,6 +238,122 @@ pub(crate) fn format_countdown(now: &jiff::Timestamp, target: &jiff::Timestamp) 
     let h = h.max(0);
     let m = m.max(0);
     format!("{h}h{m:02}m")
+}
+
+/// Phase 2 D-54 additive helper: the detailed-mode renderer prefers the per-row
+/// `detailed_label` override when present, falling back to the legacy `label`
+/// otherwise. Compact mode is unaffected (it sources its row prefix from
+/// `id_label(state.id)` per Plan 02-01 [Rule 2]).
+#[inline]
+#[must_use]
+fn effective_label(w: &HpWindow) -> &str {
+    w.detailed_label.as_deref().unwrap_or(&w.label)
+}
+
+/// Render one provider as a multi-line `--detailed` block (D-53 layout):
+///
+/// ```text
+/// {id_label}
+///   {row1_label}  {bar} {pct}% • resets in {countdown}
+///   {row2_label}  {bar} {pct}% • resets in {countdown} (limit unknown?)
+/// ```
+///
+/// - Header line: `id_label(state.id)` (no trailing space, no indent).
+/// - One indented row per `HpWindow` (2-space indent per D-53).
+/// - Row label = `effective_label(w)`, left-padded to the max effective-label
+///   length across the state's windows (handles 5h / weekly / primary /
+///   secondary alignment dynamically).
+/// - Bar styling matches compact mode 1:1 (D-56) — same glyphs, same green /
+///   yellow / red thresholds, same `--ascii` substitution.
+/// - When `w.percent_remaining.is_nan()` (Claude weekly fallback when limit is
+///   unknown), the row renders with U+2592 medium-shade cells + `??%` + a
+///   `(limit unknown)` suffix — visually distinct from the SchemaDrift
+///   sentinel's "out-of-date" wording so operators can tell "we don't have a
+///   number" apart from "data is drifted".
+/// - No trailing newline (callers concatenate provider blocks with a blank-line
+///   separator).
+#[must_use]
+pub(crate) fn detailed_block(
+    state: &ProviderState,
+    now: &jiff::Timestamp,
+    ascii: bool,
+    color_on: bool,
+) -> String {
+    let label_width = state
+        .windows
+        .iter()
+        .map(|w| effective_label(w).len())
+        .max()
+        .unwrap_or(0);
+    let mut out = String::with_capacity(64 * (state.windows.len() + 1));
+    out.push_str(id_label(state.id));
+    for w in &state.windows {
+        out.push('\n');
+        out.push_str("  ");
+        out.push_str(&render_window_row(w, now, ascii, color_on, label_width));
+    }
+    out
+}
+
+/// Build one indented window row body (no leading indent — `detailed_block`
+/// prepends the 2-space indent). Mirrors `compact_line_colored`'s bar build
+/// (D-56 binding — duplication is intentional in Plan 02-02; PATTERNS Pattern 6
+/// flags factoring `render_bar_segment` as a future Plan 03+ refactor).
+fn render_window_row(
+    w: &HpWindow,
+    now: &jiff::Timestamp,
+    ascii: bool,
+    color_on: bool,
+    label_width: usize,
+) -> String {
+    let label_padded = format!("{:<width$}", effective_label(w), width = label_width);
+    let countdown = format_countdown(now, &w.reset.resets_at);
+    let sep = if ascii { '|' } else { '\u{2022}' };
+
+    // NaN sentinel path: limit-unknown rendering (distinct from SchemaDrift).
+    if w.percent_remaining.is_nan() {
+        // Always 10 U+2592 medium-shade cells regardless of `ascii` — the
+        // sentinel needs to be visually unmistakable AND `--ascii` is a
+        // glyph-fallback flag, not a "no-Unicode" requirement (the SchemaDrift
+        // sentinel itself emits U+2592 unconditionally — see
+        // `format_error_row_colored`).
+        let bar = "\u{2592}".repeat(BAR_WIDTH);
+        if color_on {
+            return format!(
+                "{label_padded}  {bar} {pct} {sep} resets in {countdown} (limit unknown)",
+                bar = bar.bright_black(),
+                pct = "??%".bright_black(),
+            );
+        }
+        return format!(
+            "{label_padded}  {bar} ??% {sep} resets in {countdown} (limit unknown)"
+        );
+    }
+
+    let pct = w.percent_remaining.clamp(0.0, 100.0);
+    let filled = filled_cells(pct);
+    let (filled_glyph, empty_glyph): (&str, &str) = if ascii {
+        ("#", "-")
+    } else {
+        ("\u{2588}", "\u{2591}")
+    };
+    let filled_str = filled_glyph.repeat(filled);
+    let empty_str = empty_glyph.repeat(BAR_WIDTH - filled);
+
+    let bar = if color_on {
+        match pct {
+            p if p >= 30.0 => format!("{}{}", filled_str.green(), empty_str.bright_black()),
+            p if p >= 10.0 => format!("{}{}", filled_str.yellow(), empty_str.bright_black()),
+            _ => format!("{}{}", filled_str.red(), empty_str.bright_black()),
+        }
+    } else {
+        format!("{filled_str}{empty_str}")
+    };
+
+    format!(
+        "{label_padded}  {bar} {pct_int}% {sep} resets in {countdown}",
+        pct_int = pct_int(pct)
+    )
 }
 
 #[cfg(test)]
@@ -457,5 +573,245 @@ mod tests {
         assert_eq!(id_label_titlecase(ProviderId::Codex), "Codex");
         assert_eq!(id_label_titlecase(ProviderId::Gemini), "Gemini");
         assert_eq!(id_label_titlecase(ProviderId::Mock), "Mock");
+    }
+
+    // Phase 2 D-53 — detailed_block tests (D1..D6).
+
+    /// Build a Claude-shaped two-window ProviderState for D1.
+    fn make_claude_two_window_state(now: jiff::Timestamp) -> ProviderState {
+        ProviderState {
+            id: ProviderId::Claude,
+            windows: vec![
+                HpWindow {
+                    label: Cow::Borrowed("claude"),
+                    percent_remaining: 60.0,
+                    reset: ResetInfo { resets_at: now + jiff::Span::new().hours(2) },
+                    bar_color: None,
+                    detailed_label: Some(Cow::Borrowed("5h")),
+                },
+                HpWindow {
+                    label: Cow::Borrowed("weekly"),
+                    percent_remaining: f32::NAN,
+                    reset: ResetInfo {
+                        resets_at: now + jiff::Span::new().hours(4 * 24 + 6),
+                    },
+                    bar_color: None,
+                    detailed_label: Some(Cow::Borrowed("weekly")),
+                },
+            ],
+            fetched_at: now,
+            source: Cow::Borrowed("claude-jsonl"),
+        }
+    }
+
+    /// D1: full block shape for Claude two-window (header + 2 indented rows,
+    /// no trailing newline). The per-row labels come from `detailed_label`
+    /// (`5h` / `weekly`), proving the override path; padding aligns them to
+    /// 6 chars (max of "5h"=2 and "weekly"=6).
+    #[test]
+    fn detailed_block_for_claude_two_windows() {
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let state = make_claude_two_window_state(now);
+        let block = detailed_block(&state, &now, true, false);
+        let lines: Vec<&str> = block.split('\n').collect();
+        assert_eq!(lines.len(), 3, "expected 3 lines (header + 2 rows), got: {block:?}");
+        assert_eq!(lines[0], "claude", "header line: {:?}", lines[0]);
+        // ASCII bar: 60% → "######----"; pct rounded to 60; sep `|`; countdown 2h00m.
+        // `5h` padded to width 6 → `5h    ` (4 trailing spaces).
+        assert_eq!(
+            lines[1],
+            "  5h      ######---- 60% | resets in 2h00m",
+            "5h row: {:?}",
+            lines[1]
+        );
+        // weekly row: NaN sentinel — 10 U+2592 + `??%` + `(limit unknown)`.
+        assert!(
+            lines[2].starts_with("  weekly  "),
+            "weekly row prefix: {:?}",
+            lines[2]
+        );
+        assert!(
+            lines[2].contains("??%"),
+            "weekly row must contain ??% sentinel: {:?}",
+            lines[2]
+        );
+        assert!(
+            lines[2].contains("(limit unknown)"),
+            "weekly row must contain (limit unknown) footer: {:?}",
+            lines[2]
+        );
+        // No trailing newline.
+        assert!(
+            !block.ends_with('\n'),
+            "detailed_block must NOT emit a trailing newline: {block:?}"
+        );
+    }
+
+    /// D2: dynamic label-padding aligns rows to the longest effective label.
+    #[test]
+    fn detailed_block_label_left_padding_dynamic() {
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let resets = now + jiff::Span::new().hours(1);
+        let state = ProviderState {
+            id: ProviderId::Codex,
+            windows: vec![
+                HpWindow {
+                    label: Cow::Borrowed("primary"),
+                    percent_remaining: 50.0,
+                    reset: ResetInfo { resets_at: resets },
+                    bar_color: None,
+                    detailed_label: Some(Cow::Borrowed("5h")),
+                },
+                HpWindow {
+                    label: Cow::Borrowed("secondary"),
+                    percent_remaining: 25.0,
+                    reset: ResetInfo { resets_at: resets },
+                    bar_color: None,
+                    detailed_label: Some(Cow::Borrowed("secondary")),
+                },
+            ],
+            fetched_at: now,
+            source: Cow::Borrowed("test"),
+        };
+        let block = detailed_block(&state, &now, true, false);
+        let lines: Vec<&str> = block.split('\n').collect();
+        assert_eq!(lines.len(), 3);
+        // Max effective length = len("secondary") = 9. `5h` padded to width 9
+        // = `5h` + 7 spaces. Header indent is 2 spaces, then `5h       ` then 2-space gap → bar.
+        assert!(
+            lines[1].starts_with("  5h        "),
+            "5h must pad to 9 chars (`secondary` is longest): {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[2].starts_with("  secondary  "),
+            "secondary row begins as-is (no padding to add): {:?}",
+            lines[2]
+        );
+    }
+
+    /// D3: fallback to `label` when `detailed_label` is None — important for
+    /// Mock (D-25 invariant: `label = "mock-session"`).
+    #[test]
+    fn detailed_block_falls_back_to_label_when_detailed_label_none() {
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let state = ProviderState {
+            id: ProviderId::Mock,
+            windows: vec![HpWindow {
+                label: Cow::Borrowed("mock-session"),
+                percent_remaining: 60.0,
+                reset: ResetInfo { resets_at: now + jiff::Span::new().hours(2) },
+                bar_color: None,
+                detailed_label: None,
+            }],
+            fetched_at: now,
+            source: Cow::Borrowed("mock"),
+        };
+        let block = detailed_block(&state, &now, true, false);
+        let lines: Vec<&str> = block.split('\n').collect();
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0], "mock");
+        // No detailed_label → use `label` ("mock-session"). 12 chars, no padding needed.
+        assert!(
+            lines[1].starts_with("  mock-session  "),
+            "fallback to label='mock-session': {:?}",
+            lines[1]
+        );
+    }
+
+    /// D4: single-window provider — label width equals the effective label
+    /// length, no over-padding.
+    #[test]
+    fn detailed_block_for_provider_with_one_window_no_alignment_padding() {
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let state = ProviderState {
+            id: ProviderId::Codex,
+            windows: vec![HpWindow {
+                label: Cow::Borrowed("primary"),
+                percent_remaining: 90.0,
+                reset: ResetInfo { resets_at: now + jiff::Span::new().hours(1) },
+                bar_color: None,
+                detailed_label: None,
+            }],
+            fetched_at: now,
+            source: Cow::Borrowed("codex-jsonl"),
+        };
+        let block = detailed_block(&state, &now, true, false);
+        let lines: Vec<&str> = block.split('\n').collect();
+        assert_eq!(lines.len(), 2);
+        // Width = 7 (len("primary")), so the row starts with `  primary  ` —
+        // exactly 2-space indent + label + 2-space gap, NO extra padding.
+        assert_eq!(
+            lines[1],
+            "  primary  #########- 90% | resets in 1h00m",
+            "single-window row should not over-pad: {:?}",
+            lines[1]
+        );
+    }
+
+    /// D5: NaN percent renders the limit-unknown sentinel with U+2592 bytes.
+    #[test]
+    fn detailed_block_nan_renders_unknown_phrase() {
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let state = ProviderState {
+            id: ProviderId::Claude,
+            windows: vec![HpWindow {
+                label: Cow::Borrowed("weekly"),
+                percent_remaining: f32::NAN,
+                reset: ResetInfo {
+                    resets_at: now + jiff::Span::new().hours(4 * 24 + 6),
+                },
+                bar_color: None,
+                detailed_label: Some(Cow::Borrowed("weekly")),
+            }],
+            fetched_at: now,
+            source: Cow::Borrowed("claude-jsonl"),
+        };
+        let block = detailed_block(&state, &now, false, false);
+        assert!(
+            block.contains("??% \u{2022} resets in"),
+            "NaN row must contain ??% • resets in …: {block:?}"
+        );
+        assert!(
+            block.ends_with("(limit unknown)"),
+            "NaN row must end with `(limit unknown)`: {block:?}"
+        );
+        // U+2592 (medium-shade) = e2 96 92; must appear ≥ 10 times in the bar.
+        let count = block
+            .as_bytes()
+            .windows(3)
+            .filter(|w| *w == [0xe2, 0x96, 0x92])
+            .count();
+        assert!(
+            count >= 10,
+            "expected ≥ 10 U+2592 medium-shade bytes, got {count}: {block:?}"
+        );
+        // And it must NOT contain U+2591 light-shade (that's compact-mode empty cells).
+        let light_count = block
+            .as_bytes()
+            .windows(3)
+            .filter(|w| *w == [0xe2, 0x96, 0x91])
+            .count();
+        assert_eq!(
+            light_count, 0,
+            "NaN row must NOT use U+2591 light-shade: {block:?}"
+        );
+    }
+
+    /// D6: color_on=true emits ANSI bytes; color_on=false emits none.
+    #[test]
+    fn detailed_block_color_on_emits_ansi() {
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let state = make_claude_two_window_state(now);
+        let with_color = detailed_block(&state, &now, false, true);
+        let no_color = detailed_block(&state, &now, false, false);
+        assert!(
+            with_color.contains("\x1b["),
+            "color_on=true must emit ANSI escapes: {with_color:?}"
+        );
+        assert!(
+            !no_color.contains("\x1b["),
+            "color_on=false must NOT emit ANSI escapes: {no_color:?}"
+        );
     }
 }
