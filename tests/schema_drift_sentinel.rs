@@ -86,3 +86,79 @@ fn drift_in_recent_assistants_triggers_sentinel_literal() {
         "expected ≥ 10 U+2592 bytes in stdout, found {count}; stdout: {stdout}"
     );
 }
+
+/// WR-05 regression: under `--ascii`, the SchemaDrift sentinel must contain
+/// zero non-ASCII bytes (was: leaked U+2592 + U+2022 regardless of flag,
+/// defeating the purpose of `--ascii` for tmux / Starship pipelines whose
+/// terminal can't render the medium-shade glyph).
+#[test]
+fn drift_under_ascii_flag_produces_zero_non_ascii_bytes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tmp.path();
+    let projects_dir = home.join(".claude").join("projects").join("proj-a");
+    std::fs::create_dir_all(&projects_dir).unwrap();
+    let session = projects_dir.join("session.jsonl");
+    let mut f = std::fs::File::create(&session).unwrap();
+
+    // Same drift fixture as drift_in_recent_assistants_triggers_sentinel_literal:
+    // one full entry + two newer entries missing usage → SchemaDrift.
+    writeln!(
+        f,
+        r#"{{"type":"assistant","timestamp":"2026-05-23T08:00:00Z","message":{{"role":"assistant","model":"claude-opus-4-7","usage":{{"cache_creation_input_tokens":41630}}}},"uuid":"u1"}}"#
+    )
+    .unwrap();
+    writeln!(
+        f,
+        r#"{{"type":"assistant","timestamp":"2026-05-23T09:00:00Z","message":{{"role":"assistant","model":"claude-opus-4-7"}},"uuid":"u2"}}"#
+    )
+    .unwrap();
+    writeln!(
+        f,
+        r#"{{"type":"assistant","timestamp":"2026-05-23T10:00:00Z","message":{{"role":"assistant","model":"claude-opus-4-7"}},"uuid":"u3"}}"#
+    )
+    .unwrap();
+    drop(f);
+
+    let xdg = tmp.path().join("xdg");
+    let config_dir = xdg.join("ahb");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    std::fs::write(
+        config_dir.join("config.toml"),
+        "[providers.claude]\nenabled = true\n",
+    )
+    .unwrap();
+
+    let output = assert_cmd::Command::cargo_bin("ahb")
+        .unwrap()
+        .arg("--ascii")
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", &xdg)
+        .env("NO_COLOR", "1")
+        .env("AHB_SECRETS_MOCK", "1")
+        .output()
+        .expect("subprocess should run");
+    let stdout = output.stdout.clone();
+    // Every byte in stdout must be ASCII (< 128). The `--ascii` flag's
+    // contract is "no Unicode in my output stream"; pre-fix the SchemaDrift
+    // sentinel violated this.
+    let non_ascii_bytes: Vec<(usize, u8)> = stdout
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, b)| *b >= 128)
+        .collect();
+    let stdout_str = String::from_utf8_lossy(&stdout);
+    assert!(
+        non_ascii_bytes.is_empty(),
+        "ahb --ascii leaked non-ASCII bytes in SchemaDrift sentinel: {non_ascii_bytes:?}\nstdout: {stdout_str}"
+    );
+    // Sanity: the ASCII sentinel still renders distinctly — `?` bar + `??%`.
+    assert!(
+        stdout_str.contains("?????????? ??% |"),
+        "expected ASCII drift sentinel; stdout: {stdout_str}"
+    );
+    assert!(
+        stdout_str.contains("Claude adapter may be out-of-date"),
+        "expected drift phrase; stdout: {stdout_str}"
+    );
+}

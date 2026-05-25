@@ -152,22 +152,40 @@ pub fn format_error_row(id: ProviderId, err: &ProviderError, ascii: bool) -> Str
 /// Color-aware variant. `color_on=true` paints the bar cells + `??%` `DarkGray`
 /// (Secondary role per UI-SPEC — "unknown, not critical") and the trailing phrase
 /// `Claude adapter may be out-of-date` Bold + Red (Destructive role).
+///
+/// WR-05: `ascii` IS now consulted for the SchemaDrift sentinel — pre-fix the
+/// parameter was `_ascii` and the function unconditionally emitted U+2592 +
+/// U+2022 regardless. Users who passed `--ascii` for tmux / Starship pipelines
+/// (where the consuming terminal may not render U+2592) saw the rest of the
+/// output go ASCII but the SchemaDrift row contained 3-byte UTF-8 sequences.
+/// Now the bar cells become `?` (matches the `??%` semantics — the whole
+/// sentinel reads "we have no idea") and the separator becomes `|` (matches
+/// `compact_line`'s ASCII separator). Claude-default (non-ASCII) rendering
+/// is byte-identical to Phase 1 — `tests/schema_drift_sentinel.rs` continues
+/// to pass unchanged.
 #[must_use]
 pub fn format_error_row_colored(
     id: ProviderId,
     err: &ProviderError,
-    _ascii: bool,
+    ascii: bool,
     color_on: bool,
 ) -> String {
     let label = id_label(id);
     if let ProviderError::SchemaDrift { .. } = err {
-        // UI-SPEC LOCKED sentinel: 10× U+2592 medium-shade, " ??% ", U+2022, then phrase.
+        // UI-SPEC LOCKED sentinel: 10 bar cells (`U+2592` medium-shade by
+        // default; `?` repeated under `--ascii`), " ??% ", separator
+        // (`U+2022` middle dot by default; `|` under `--ascii`), then phrase.
         // Phase 2 amendment: the phrase is now per-provider Title-cased
-        // (`{Label} adapter may be out-of-date`) so Codex / Gemini / Mock render
-        // correctly when triggering SchemaDrift. Claude rendering is byte-identical
-        // to Phase 1 — `tests/schema_drift_sentinel.rs` continues to pass unchanged.
-        let bar = "\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}";
+        // (`{Label} adapter may be out-of-date`) so Codex / Gemini / Mock
+        // render correctly when triggering SchemaDrift.
+        let bar_owned = if ascii {
+            "?".repeat(BAR_WIDTH)
+        } else {
+            "\u{2592}".repeat(BAR_WIDTH)
+        };
+        let bar = bar_owned.as_str();
         let pct = "??%";
+        let sep = if ascii { '|' } else { '\u{2022}' };
         let phrase_owned = format!(
             "{label_titlecased} adapter may be out-of-date",
             label_titlecased = id_label_titlecase(id)
@@ -175,13 +193,13 @@ pub fn format_error_row_colored(
         let phrase = phrase_owned.as_str();
         if color_on {
             return format!(
-                "{label}  {bar} {pct} \u{2022} {phrase}",
+                "{label}  {bar} {pct} {sep} {phrase}",
                 bar = bar.bright_black(),
                 pct = pct.bright_black(),
                 phrase = phrase.red().bold(),
             );
         }
-        return format!("{label}  {bar} {pct} \u{2022} {phrase}");
+        return format!("{label}  {bar} {pct} {sep} {phrase}");
     }
     let reason = format_one_line(&err.to_string());
     format!("{label}  ERROR: {reason}")
@@ -691,6 +709,45 @@ mod tests {
         let row = format_error_row_colored(ProviderId::Claude, &err, false, false);
         let expected = "claude  \u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592} ??% \u{2022} Claude adapter may be out-of-date";
         assert_eq!(row, expected, "Claude row must stay byte-identical to Phase 1");
+    }
+
+    // WR-05: SchemaDrift sentinel under `--ascii` must produce ZERO non-ASCII
+    // bytes. Pre-fix `_ascii` was ignored and the row contained 3-byte U+2592
+    // / U+2022 sequences regardless of the flag, defeating the purpose of
+    // `--ascii` for tmux / Starship users whose terminal can't render U+2592.
+    #[test]
+    fn format_error_row_schema_drift_under_ascii_is_pure_ascii() {
+        let err = ProviderError::SchemaDrift {
+            missing: vec!["rate_limits".into()],
+        };
+        let row = format_error_row_colored(ProviderId::Codex, &err, true, false);
+        // Every byte must be ASCII (< 128).
+        assert!(
+            row.bytes().all(|b| b < 128),
+            "ascii SchemaDrift row contains non-ASCII bytes: {row:?}"
+        );
+        // The bar cells become `?` (length 10) matching the `??%` semantics.
+        assert!(
+            row.contains("?????????? ??% |"),
+            "expected ASCII bar + separator, got: {row:?}"
+        );
+        // Phrase still per-provider Title-cased.
+        assert!(
+            row.ends_with("Codex adapter may be out-of-date"),
+            "phrase missing or wrong-provider: {row:?}"
+        );
+    }
+
+    #[test]
+    fn format_error_row_schema_drift_unicode_default_unchanged() {
+        // Belt-and-suspenders on the byte-identical guarantee: the
+        // non-ASCII path stays exactly U+2592 + U+2022 + Title phrase.
+        let err = ProviderError::SchemaDrift {
+            missing: vec!["x".into()],
+        };
+        let row = format_error_row_colored(ProviderId::Codex, &err, false, false);
+        assert!(row.contains('\u{2592}'), "must contain U+2592: {row:?}");
+        assert!(row.contains('\u{2022}'), "must contain U+2022: {row:?}");
     }
 
     #[test]
