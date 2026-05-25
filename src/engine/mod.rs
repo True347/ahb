@@ -135,6 +135,11 @@ impl Engine {
 mod tests {
     use super::*;
     use crate::config::{Config, ProviderConfig, Providers};
+    use crate::model::{HpWindow, NetworkErr, ResetInfo};
+    use async_trait::async_trait;
+    use std::borrow::Cow;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     #[allow(clippy::default_constructed_unit_structs)]
@@ -170,11 +175,15 @@ mod tests {
         let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
         let results = engine.refresh_all(now).await;
         assert_eq!(results.len(), 1);
-        let (pid, result) = &results[0];
+        let (pid, outcome) = &results[0];
         assert_eq!(*pid, ProviderId::Mock);
-        let state = result.as_ref().unwrap();
-        assert_eq!(state.id, ProviderId::Mock);
-        assert_eq!(state.fetched_at, now);
+        match outcome {
+            RowOutcome::Fresh(state) => {
+                assert_eq!(state.id, ProviderId::Mock);
+                assert_eq!(state.fetched_at, now);
+            }
+            other => panic!("expected Fresh, got {other:?}"),
+        }
     }
 
     #[tokio::test]
@@ -209,5 +218,261 @@ mod tests {
         let now: jiff::Timestamp = "2026-05-23T12:00:00Z".parse().unwrap();
         let results = engine.refresh_all(now).await;
         assert!(results.is_empty());
+    }
+
+    // ============================================================================
+    // Phase 3 Plan 02 — Cache + TTL + RowOutcome behavioral tests (D-66..D-72).
+    //
+    // These tests drive the engine via `new_for_test(...)` (a `pub(crate)` helper
+    // that bypasses Config-based construction so we can plug in
+    // stateful test providers). The cache itself is owned by `Engine` (Q4
+    // resolution — internal own, no injection).
+    // ============================================================================
+
+    /// Synthetic state for a test provider — deterministic shape so tests can
+    /// assert on Fresh/Stale state contents.
+    fn synthetic_state(id: ProviderId, now: jiff::Timestamp) -> ProviderState {
+        ProviderState {
+            id,
+            windows: vec![HpWindow {
+                label: Cow::Borrowed("test"),
+                percent_remaining: 50.0,
+                reset: ResetInfo {
+                    resets_at: now + jiff::Span::new().hours(1),
+                },
+                bar_color: None,
+                detailed_label: None,
+            }],
+            fetched_at: now,
+            source: Cow::Borrowed("test"),
+        }
+    }
+
+    /// A test provider that records `fetch` call count and whose return value
+    /// can be programmatically scripted from an external `Mutex<VecDeque<...>>`.
+    struct ScriptedProvider {
+        id: ProviderId,
+        calls: AtomicU64,
+        script: Mutex<std::collections::VecDeque<Result<ProviderState, ProviderError>>>,
+    }
+
+    impl ScriptedProvider {
+        fn new(id: ProviderId, script: Vec<Result<ProviderState, ProviderError>>) -> Self {
+            Self {
+                id,
+                calls: AtomicU64::new(0),
+                script: Mutex::new(script.into_iter().collect()),
+            }
+        }
+        fn call_count(&self) -> u64 {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait]
+    impl Provider for ScriptedProvider {
+        fn id(&self) -> ProviderId {
+            self.id
+        }
+        async fn fetch(&self, _ctx: &FetchCtx<'_>) -> Result<ProviderState, ProviderError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let next = {
+                let mut script = self
+                    .script
+                    .lock()
+                    .map_err(|_| ProviderError::Internal {
+                        source: anyhow::anyhow!("script poisoned"),
+                    })?;
+                script.pop_front()
+            };
+            match next {
+                Some(r) => r,
+                None => Err(ProviderError::Internal {
+                    source: anyhow::anyhow!("script exhausted"),
+                }),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn engine_caches_successful_fetch() {
+        // D-71 row 1: t < last + refresh_interval → reuse cache → Fresh (no
+        // tag). The second refresh_all within the TTL window must NOT call
+        // the provider's fetch.
+        let t0: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let provider = Arc::new(ScriptedProvider::new(
+            ProviderId::Mock,
+            vec![Ok(synthetic_state(ProviderId::Mock, t0))],
+        ));
+        let providers: Vec<Arc<dyn Provider>> = vec![provider.clone()];
+        let mut refresh_intervals = std::collections::HashMap::new();
+        refresh_intervals.insert(ProviderId::Mock, Duration::from_secs(15));
+        let engine = Engine::new_for_test(providers, Secrets::default(), refresh_intervals);
+
+        // First call: fetches.
+        let results1 = engine.refresh_all(t0).await;
+        assert_eq!(results1.len(), 1);
+        assert_eq!(provider.call_count(), 1, "first call must fetch");
+        match &results1[0].1 {
+            RowOutcome::Fresh(_) => {}
+            other => panic!("first call should be Fresh, got {other:?}"),
+        }
+
+        // Second call within TTL: NO fetch, returns cache as Fresh.
+        let t1 = t0 + jiff::Span::new().seconds(5);
+        let results2 = engine.refresh_all(t1).await;
+        assert_eq!(results2.len(), 1);
+        assert_eq!(
+            provider.call_count(),
+            1,
+            "second call within TTL must NOT fetch"
+        );
+        match &results2[0].1 {
+            RowOutcome::Fresh(state) => assert_eq!(state.id, ProviderId::Mock),
+            other => panic!("second call should be Fresh from cache, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn engine_returns_stale_on_transient_error_with_cache_hit() {
+        // D-71 row 3: t >= last + TTL & fetch transiently fails + cache hit
+        // → RowOutcome::Stale with correct stale_age_secs.
+        let t0: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let provider = Arc::new(ScriptedProvider::new(
+            ProviderId::Mock,
+            vec![
+                Ok(synthetic_state(ProviderId::Mock, t0)),
+                Err(ProviderError::Network {
+                    source: NetworkErr("simulated transient".into()),
+                }),
+            ],
+        ));
+        let providers: Vec<Arc<dyn Provider>> = vec![provider.clone()];
+        let mut refresh_intervals = std::collections::HashMap::new();
+        refresh_intervals.insert(ProviderId::Mock, Duration::from_secs(5));
+        let engine = Engine::new_for_test(providers, Secrets::default(), refresh_intervals);
+
+        // Prime: successful fetch populates cache at t0.
+        let _ = engine.refresh_all(t0).await;
+        assert_eq!(provider.call_count(), 1);
+
+        // 30 seconds later: TTL elapsed, fetch returns Network error, cache
+        // hit → Stale with stale_age_secs = 30.
+        let t1 = t0 + jiff::Span::new().seconds(30);
+        let results = engine.refresh_all(t1).await;
+        assert_eq!(provider.call_count(), 2, "TTL elapsed must trigger fetch");
+        match &results[0].1 {
+            RowOutcome::Stale { state, stale_age_secs } => {
+                assert_eq!(state.id, ProviderId::Mock);
+                assert_eq!(
+                    *stale_age_secs, 30,
+                    "stale age = (now - cache.fetched_at).total(Second)"
+                );
+            }
+            other => panic!("expected Stale, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn engine_returns_failed_on_non_transient_error_regardless_of_cache() {
+        // D-71 + Q2 mapping: non-transient (Unavailable) error must NEVER
+        // promote to Stale even when cache has a hit.
+        let t0: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let provider = Arc::new(ScriptedProvider::new(
+            ProviderId::Mock,
+            vec![
+                Ok(synthetic_state(ProviderId::Mock, t0)),
+                Err(ProviderError::Unavailable {
+                    reason: "structurally broken".into(),
+                }),
+            ],
+        ));
+        let providers: Vec<Arc<dyn Provider>> = vec![provider.clone()];
+        let mut refresh_intervals = std::collections::HashMap::new();
+        refresh_intervals.insert(ProviderId::Mock, Duration::from_secs(5));
+        let engine = Engine::new_for_test(providers, Secrets::default(), refresh_intervals);
+
+        // Prime: successful fetch populates cache.
+        let _ = engine.refresh_all(t0).await;
+
+        // After TTL elapses: Unavailable is non-transient → Failed (NOT Stale).
+        let t1 = t0 + jiff::Span::new().seconds(30);
+        let results = engine.refresh_all(t1).await;
+        match &results[0].1 {
+            RowOutcome::Failed(ProviderError::Unavailable { .. }) => {}
+            other => panic!(
+                "expected Failed(Unavailable), got {other:?} (must NOT promote to Stale per Q2)"
+            ),
+        }
+    }
+
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    fn refresh_interval_clamps_to_five_seconds_minimum() {
+        // D-72: refresh_interval < 5s must clamp to 5s.
+        let cfg = Config {
+            providers: Providers {
+                mock: ProviderConfig {
+                    enabled: true,
+                    refresh_interval: Some(2), // below clamp
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        };
+        let engine = Engine::new(cfg, Secrets::default());
+        let stored = engine
+            .refresh_interval_for(ProviderId::Mock)
+            .expect("mock interval present");
+        assert_eq!(
+            stored,
+            Duration::from_secs(5),
+            "raw value 2 < 5 must clamp to 5s (D-72)"
+        );
+    }
+
+    #[tokio::test]
+    async fn engine_row_order_preserved_with_row_outcome() {
+        // BL-02 / Pitfall 16: sort_by_key still applies to the new Vec<(_, RowOutcome)>
+        // shape; also covers Pitfall 16 (must emit Fresh per provider even when
+        // all are cached — empty Vec would mistake "all cached" for "no providers").
+        let t0: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let claude_provider = Arc::new(ScriptedProvider::new(
+            ProviderId::Claude,
+            vec![
+                Ok(synthetic_state(ProviderId::Claude, t0)),
+                Ok(synthetic_state(ProviderId::Claude, t0)),
+            ],
+        ));
+        let mock_provider = Arc::new(ScriptedProvider::new(
+            ProviderId::Mock,
+            vec![
+                Ok(synthetic_state(ProviderId::Mock, t0)),
+                Ok(synthetic_state(ProviderId::Mock, t0)),
+            ],
+        ));
+        // Intentionally reversed input order — engine must sort to Claude=0, Mock=3.
+        let providers: Vec<Arc<dyn Provider>> =
+            vec![mock_provider.clone(), claude_provider.clone()];
+        let mut refresh_intervals = std::collections::HashMap::new();
+        refresh_intervals.insert(ProviderId::Claude, Duration::from_secs(15));
+        refresh_intervals.insert(ProviderId::Mock, Duration::from_secs(15));
+        let engine = Engine::new_for_test(providers, Secrets::default(), refresh_intervals);
+
+        // First pass: both fetched.
+        let r1 = engine.refresh_all(t0).await;
+        assert_eq!(r1.len(), 2);
+        assert_eq!(r1[0].0, ProviderId::Claude, "Claude first per BL-02");
+        assert_eq!(r1[1].0, ProviderId::Mock, "Mock last per BL-02");
+
+        // Second pass within TTL: both cache-hit. Order MUST still be canonical
+        // AND we must still get 2 rows (Pitfall 16 — not empty Vec).
+        let r2 = engine.refresh_all(t0 + jiff::Span::new().seconds(5)).await;
+        assert_eq!(r2.len(), 2, "all-cached pass must emit one row per provider");
+        assert_eq!(r2[0].0, ProviderId::Claude);
+        assert_eq!(r2[1].0, ProviderId::Mock);
+        for (_, outcome) in &r2 {
+            assert!(matches!(outcome, RowOutcome::Fresh(_)));
+        }
     }
 }
