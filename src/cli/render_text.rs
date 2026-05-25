@@ -86,9 +86,19 @@ pub fn compact_line_colored(
     let countdown = format_countdown(now, &w.reset.resets_at);
     let sep = if ascii { '|' } else { '\u{2022}' };
 
+    // Phase 2 [Rule 2]: row label is the provider id (UI-SPEC LOCKED line 141 —
+    // "Provider labels in output use the lowercase provider name as it appears
+    // in `ProviderId`'s `snake_case` serialization"). Pre-Phase-2 this happened
+    // to align with `windows[0].label` because Claude's window label IS "claude";
+    // Codex breaks that coincidence (D-48 passthrough labels "primary" /
+    // "secondary") so we now route the row label through `id_label` explicitly.
+    // Mock compact output also flips from `mock-session  …` to `mock  …`; this
+    // aligns the Mock label with the UI-SPEC binding (the per-window label
+    // remains `"mock-session"` for the internal model and is what `--detailed`
+    // surfaces in Plan 02-02).
     format!(
         "{label}  {bar} {pct}% {sep} resets in {countdown}",
-        label = w.label,
+        label = id_label(state.id),
         pct = pct_int(pct)
     )
 }
@@ -122,9 +132,17 @@ pub fn format_error_row_colored(
     let label = id_label(id);
     if let ProviderError::SchemaDrift { .. } = err {
         // UI-SPEC LOCKED sentinel: 10× U+2592 medium-shade, " ??% ", U+2022, then phrase.
+        // Phase 2 amendment: the phrase is now per-provider Title-cased
+        // (`{Label} adapter may be out-of-date`) so Codex / Gemini / Mock render
+        // correctly when triggering SchemaDrift. Claude rendering is byte-identical
+        // to Phase 1 — `tests/schema_drift_sentinel.rs` continues to pass unchanged.
         let bar = "\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}";
         let pct = "??%";
-        let phrase = "Claude adapter may be out-of-date";
+        let phrase_owned = format!(
+            "{label_titlecased} adapter may be out-of-date",
+            label_titlecased = id_label_titlecase(id)
+        );
+        let phrase = phrase_owned.as_str();
         if color_on {
             return format!(
                 "{label}  {bar} {pct} \u{2022} {phrase}",
@@ -169,6 +187,20 @@ pub(crate) fn id_label(id: ProviderId) -> &'static str {
         ProviderId::Codex => "codex",
         ProviderId::Gemini => "gemini",
         ProviderId::Mock => "mock",
+    }
+}
+
+/// Title-cased provider label for the SchemaDrift sentinel phrase
+/// (`{Label} adapter may be out-of-date`). Phase 2 generalization (D-Deferred
+/// folded — see RESEARCH §Open Questions Q2 RESOLVED): the Claude rendering is
+/// byte-identical to Phase 1; Codex / Gemini / Mock now render correctly.
+#[must_use]
+pub(crate) fn id_label_titlecase(id: ProviderId) -> &'static str {
+    match id {
+        ProviderId::Claude => "Claude",
+        ProviderId::Codex => "Codex",
+        ProviderId::Gemini => "Gemini",
+        ProviderId::Mock => "Mock",
     }
 }
 
@@ -229,6 +261,11 @@ mod tests {
     }
 
     // Test 1: Unicode byte-exact line for the D-25 fixture.
+    // Phase 2: row label is `mock` (provider id) — Phase 2 [Rule 2] applies the
+    // UI-SPEC LOCKED rule that "provider labels in output use the lowercase
+    // provider name". Pre-Phase-2 this test asserted `mock-session  …` because
+    // the renderer happened to read `windows[0].label`; the renderer now reads
+    // `id_label(state.id)` (Codex broke that coincidence — D-48 passthrough).
     #[test]
     fn compact_line_unicode_byte_exact() {
         let now: jiff::Timestamp = "2026-05-22T12:00:00Z".parse().unwrap();
@@ -238,7 +275,7 @@ mod tests {
         let line = compact_line(&state, &now, false);
         assert_eq!(
             line,
-            "mock-session  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\
+            "mock  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\
              \u{2591}\u{2591}\u{2591}\u{2591} 60% \u{2022} resets in 2h00m"
         );
     }
@@ -251,7 +288,7 @@ mod tests {
         let state = make_state(60.0, resets_at);
 
         let line = compact_line(&state, &now, true);
-        assert_eq!(line, "mock-session  ######---- 60% | resets in 2h00m");
+        assert_eq!(line, "mock  ######---- 60% | resets in 2h00m");
     }
 
     // Test 3: Bar width is fixed at 10 cells regardless of percent.
@@ -383,5 +420,41 @@ mod tests {
         assert_eq!(EMPTY_STATE_HEADING, "no providers configured");
         assert!(EMPTY_STATE_BODY.contains("config.toml"));
         assert!(EMPTY_STATE_BODY.contains("README"));
+    }
+
+    // Phase 2 Test E: SchemaDrift sentinel for Codex uses "Codex adapter…"
+    #[test]
+    fn format_error_row_codex_uses_codex_label_in_schema_drift_sentinel() {
+        let err = ProviderError::SchemaDrift {
+            missing: vec!["rate_limits".into()],
+        };
+        let row = format_error_row_colored(ProviderId::Codex, &err, false, false);
+        assert!(
+            row.ends_with("Codex adapter may be out-of-date"),
+            "Codex row should end with `Codex adapter may be out-of-date`, got: {row:?}"
+        );
+        assert!(
+            row.starts_with("codex  "),
+            "row should start with `codex  ` (lowercase id_label), got: {row:?}"
+        );
+    }
+
+    // Phase 2 Test F: SchemaDrift sentinel for Claude stays byte-identical to Phase 1.
+    #[test]
+    fn format_error_row_claude_schema_drift_sentinel_byte_identical_to_phase_1() {
+        let err = ProviderError::SchemaDrift {
+            missing: vec!["cache_creation_input_tokens".into()],
+        };
+        let row = format_error_row_colored(ProviderId::Claude, &err, false, false);
+        let expected = "claude  \u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592}\u{2592} ??% \u{2022} Claude adapter may be out-of-date";
+        assert_eq!(row, expected, "Claude row must stay byte-identical to Phase 1");
+    }
+
+    #[test]
+    fn id_label_titlecase_returns_titlecased_provider_names() {
+        assert_eq!(id_label_titlecase(ProviderId::Claude), "Claude");
+        assert_eq!(id_label_titlecase(ProviderId::Codex), "Codex");
+        assert_eq!(id_label_titlecase(ProviderId::Gemini), "Gemini");
+        assert_eq!(id_label_titlecase(ProviderId::Mock), "Mock");
     }
 }

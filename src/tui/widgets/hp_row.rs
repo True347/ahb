@@ -25,7 +25,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Widget};
 
-use crate::cli::render_text::{filled_cells, format_countdown, id_label};
+use crate::cli::render_text::{filled_cells, format_countdown, id_label, id_label_titlecase};
 use crate::tui::app::RowState;
 
 /// Phase 0 D-16 — fixed bar width for horizontal alignment.
@@ -101,7 +101,15 @@ fn build_ok_line(state: &crate::model::ProviderState, now: &jiff::Timestamp) -> 
 fn build_schema_drift_line(id: crate::model::ProviderId) -> Line<'static> {
     let label = id_label(id);
     // UI-SPEC LOCKED: 10× U+2592 medium-shade (NOT U+2591), DarkGray.
+    // Phase 2 amendment: the trailing phrase is now per-provider Title-cased
+    // (`{Label} adapter may be out-of-date`) via `id_label_titlecase`. The Claude
+    // rendering is byte-identical to Phase 1; Codex / Gemini / Mock now render
+    // their own provider name correctly.
     let bar = "\u{2592}".repeat(BAR_WIDTH);
+    let phrase = format!(
+        "{label_titlecased} adapter may be out-of-date",
+        label_titlecased = id_label_titlecase(id)
+    );
     Line::from(vec![
         Span::raw(format!("{label}  ")),
         Span::styled(bar, Style::default().fg(Color::DarkGray)),
@@ -111,7 +119,7 @@ fn build_schema_drift_line(id: crate::model::ProviderId) -> Line<'static> {
         Span::styled("\u{2022}", Style::default().fg(Color::DarkGray)),
         Span::raw(" "),
         Span::styled(
-            "Claude adapter may be out-of-date",
+            phrase,
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
     ])
@@ -161,6 +169,9 @@ mod tests {
 
     #[test]
     fn schema_drift_row_uses_id_label_not_hardcoded_claude() {
+        // Phase 2 amendment: when SchemaDrift fires on Codex, the sentinel phrase
+        // is `Codex adapter may be out-of-date` (per-provider Title-cased) — NOT
+        // the hardcoded `Claude adapter may be out-of-date` from Phase 1.
         let drift = RowState::SchemaDrift { id: ProviderId::Codex };
         let line = build_line(&drift, &fixture_now());
         let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
@@ -169,11 +180,30 @@ mod tests {
             "schema-drift label should come from id_label, got: {plain}"
         );
         assert!(
-            plain.contains("Claude adapter may be out-of-date"),
-            "UI-SPEC sentinel phrase must appear: {plain}"
+            plain.contains("Codex adapter may be out-of-date"),
+            "UI-SPEC Phase 2 sentinel phrase must use `Codex` for Codex drift: {plain}"
+        );
+        assert!(
+            !plain.contains("Claude adapter"),
+            "Codex drift must NOT render the Claude sentinel: {plain}"
         );
         // U+2592 medium-shade present
         assert!(plain.contains('\u{2592}'), "medium-shade glyph missing: {plain:?}");
+    }
+
+    #[test]
+    fn schema_drift_row_for_claude_stays_byte_identical_to_phase_1_phrase() {
+        let drift = RowState::SchemaDrift { id: ProviderId::Claude };
+        let line = build_line(&drift, &fixture_now());
+        let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            plain.starts_with("claude  "),
+            "Claude drift row should start with `claude  `, got: {plain}"
+        );
+        assert!(
+            plain.contains("Claude adapter may be out-of-date"),
+            "Claude drift sentinel must remain byte-identical to Phase 1: {plain}"
+        );
     }
 
     #[test]

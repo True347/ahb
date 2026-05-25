@@ -57,7 +57,14 @@ impl Engine {
             ));
         }
         if cfg.providers.codex.enabled {
-            tracing::debug!("providers.codex.enabled is true but Codex adapter is Phase 2 — skipping");
+            // Mirror the Claude branch's HOME resolution. Unavailable HOME collapses
+            // to an empty PathBuf — the adapter will then surface
+            // `no ~/.codex/state_*.sqlite found — is Codex CLI installed?` via the
+            // Provider::fetch error path.
+            let home = directories::BaseDirs::new()
+                .map(|d| d.home_dir().to_path_buf())
+                .unwrap_or_default();
+            providers.push(Arc::new(crate::provider::codex::CodexProvider::new(&home)));
         }
         if cfg.providers.gemini.enabled {
             tracing::debug!(

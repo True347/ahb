@@ -128,6 +128,9 @@ AHB is operator-facing. Every string is short, imperative, and tells the user wh
 | Error state (per-row, healthy peers present) | `{provider}  ERROR: {one-line reason}` — example: `claude  ERROR: ~/.claude/projects not found — is Claude Code installed?`. The reason line MUST be a single line ≤ 80 cols and MUST end with a "next step" hint (a question the user can act on or a path to check). |
 | Error state (all providers failed) | Same per-row format for each; process exits with code 1 (Phase 2 CORE-06 locks the exit code; Phase 1 already emits the per-row text correctly so Phase 2 only needs to add the exit-code wiring). |
 | Schema-drift sentinel (ADP-03) | `claude  ▒▒▒▒▒▒▒▒▒▒ ??% • Claude adapter may be out-of-date` — bar renders all-empty cells in DarkGray (not Red — this is "unknown", not "critical"), percent shown as literal `??`, separator and message follow. The leading 6 words `Claude adapter may be out-of-date` are Bold + Red (Destructive role). |
+
+> **Phase 2 amendment (2026-05):** The phrase is now `{Label} adapter may be out-of-date` where `{Label}` is `Claude` / `Codex` / `Gemini` / `Mock` via `cli::render_text::id_label_titlecase`. The Claude rendering is byte-identical to Phase 1; Codex `rate_limits: null` now renders `Codex adapter may be out-of-date` (Phase 2 ADP-04 generalization).
+
 | TUI non-TTY refusal (TUI-05) | `AHB tui requires a terminal (stdout is not a TTY). Run AHB without 'tui' for piped / non-interactive output.` — printed to stderr, exit code 2. |
 | TUI quit hint (status line, footer row) | `q quit  ·  ctrl-c quit` — single line, Secondary color, bottom row of the TUI frame. No "press any key to..." prose. |
 | Destructive confirmation | **N/A — Phase 1 has no destructive actions.** AHB only reads (Claude JSONL files, keyring entries). It never writes secrets back to keyring in Phase 1 (Phase 2 / 3 may add `AHB login` style commands; those will declare their own confirmation copy). |
