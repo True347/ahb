@@ -67,9 +67,14 @@ impl Engine {
             providers.push(Arc::new(crate::provider::codex::CodexProvider::new(&home)));
         }
         if cfg.providers.gemini.enabled {
-            tracing::debug!(
-                "providers.gemini.enabled is true but Gemini adapter is Phase 3 — skipping"
-            );
+            // CR-01 fix: mirror the Claude / Codex branch and push a real
+            // provider that returns `Err(Unavailable)`. Phase 3 swaps in the
+            // real adapter; the Engine wiring does not change. Without this
+            // branch, a Gemini-only config silently collapsed to the
+            // empty-state path (exit 0 "no providers configured") instead of
+            // the documented "all configured providers failed" exit 1 — see
+            // D-59 / D-61.
+            providers.push(Arc::new(crate::provider::gemini::GeminiUnimplementedProvider));
         }
         if cfg.providers.mock.enabled {
             providers.push(Arc::new(crate::provider::mock::MockProvider));

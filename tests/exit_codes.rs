@@ -81,6 +81,23 @@ fn setup_fake_home_with_no_providers() -> (tempfile::TempDir, std::path::PathBuf
     (tmp, xdg)
 }
 
+/// Gemini-only config (the CR-01 regression scenario). Pre-fix this returned
+/// an empty refresh_all Vec and silently exited 0; post-fix the placeholder
+/// `GeminiUnimplementedProvider` emits `Err(Unavailable)` → exit 1.
+fn setup_fake_home_with_gemini_only() -> (tempfile::TempDir, std::path::PathBuf) {
+    let tmp = tempfile::tempdir().unwrap();
+    let home = tmp.path().to_path_buf();
+    let xdg = home.join("config_home");
+    let ahb_cfg = xdg.join("ahb");
+    std::fs::create_dir_all(&ahb_cfg).unwrap();
+    std::fs::write(
+        ahb_cfg.join("config.toml"),
+        "[providers.claude]\nenabled = false\n[providers.codex]\nenabled = false\n[providers.gemini]\nenabled = true\n",
+    )
+    .unwrap();
+    (tmp, xdg)
+}
+
 fn run_ahb(home: &std::path::Path, xdg: &std::path::Path, args: &[&str]) -> std::process::Output {
     let mut cmd = Command::cargo_bin("ahb").unwrap();
     cmd.env("HOME", home)
@@ -182,5 +199,33 @@ fn exit_code_2_on_detailed_and_json_conflict() {
     assert!(
         stderr.contains("cannot be used with"),
         "expected clap conflict message; stderr: {stderr}"
+    );
+}
+
+/// C7 (CR-01 regression): Gemini-only enabled → exit 1 (configured but
+/// failed). Pre-fix this returned exit 0 because the Gemini branch in
+/// `Engine::new` silently dropped the provider, leaving `refresh_all` to
+/// return an empty Vec which `DispatchOutcome::from_results` collapses to
+/// `AnySuccess` (CFG-04). Post-fix `GeminiUnimplementedProvider` emits
+/// `Err(Unavailable)` so the dispatch correctly returns `AllFailed`.
+#[test]
+fn exit_code_1_when_only_gemini_enabled() {
+    let (_tmp, xdg) = setup_fake_home_with_gemini_only();
+    let out = run_ahb(_tmp.path(), &xdg, &[]);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "expected exit 1 when Gemini-only enabled (CR-01 regression); stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&out.stderr),
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("gemini"),
+        "stdout should render a `gemini` row, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("not yet implemented"),
+        "stdout should explain Phase 3 status to the user, got: {stdout}"
     );
 }

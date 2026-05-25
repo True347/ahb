@@ -18,6 +18,7 @@ use crate::secrets::Secrets;
 
 pub mod claude;
 pub mod codex;
+pub mod gemini;
 pub mod mock;
 
 /// Per-fetch context. Currently the minimal 2 fields recommended by RESEARCH Q5:
