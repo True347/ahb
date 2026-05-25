@@ -88,6 +88,9 @@ async fn main() -> anyhow::Result<()> {
 
     let engine = Engine::new(cfg, secrets);
 
+    // Plan 02-03 Task 1: run_compact / run_detailed now return Result<DispatchOutcome>.
+    // The exit-code wiring (Task 2) replaces this match with a `let outcome = ...; std::process::exit(outcome.exit_code())` form.
+    // For Task 1 we discard the outcome to preserve the prior behavior (exit 0 on success).
     match cli.command {
         Some(Command::Tui) => ahb::tui::run(engine).await,
         None => {
@@ -97,10 +100,11 @@ async fn main() -> anyhow::Result<()> {
             // the flag stands alone and the no-flag default stays compact
             // (byte-identical to Phase 1).
             if cli.detailed {
-                ahb::cli::run_detailed(&engine, cli.ascii, cli.color).await
+                ahb::cli::run_detailed(&engine, cli.ascii, cli.color).await?;
             } else {
-                ahb::cli::run_compact(&engine, cli.ascii, cli.color).await
+                ahb::cli::run_compact(&engine, cli.ascii, cli.color).await?;
             }
+            Ok(())
         }
     }
 }

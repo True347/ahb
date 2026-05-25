@@ -159,7 +159,11 @@ pub fn format_error_row_colored(
 
 /// Sanitize a reason string into one line (collapse any newline / CR to a space).
 /// Defensive: `ProviderError`'s Display strings should already be one line.
-fn format_one_line(s: &str) -> String {
+/// Phase 2 Plan 02-03: promoted from private to `pub(crate)` so `render_json`
+/// can reuse the same sanitizer for `JsonError.message` (D-49 binding — Display
+/// only, never Debug; collapse whitespace).
+#[must_use]
+pub(crate) fn format_one_line(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut prev_space = false;
     for ch in s.chars() {
