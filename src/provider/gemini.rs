@@ -77,12 +77,12 @@ mod tests {
         match err {
             ProviderError::Unavailable { reason } => {
                 assert!(
-                    reason.contains("not yet implemented"),
-                    "reason should explain Phase 3 status: {reason}"
+                    reason.contains("Gemini adapter deferred to v2"),
+                    "reason: {reason}"
                 );
                 assert!(
-                    reason.contains("enabled = false"),
-                    "reason should include next-step hint per UI-SPEC: {reason}"
+                    reason.contains("README §Gemini status"),
+                    "reason: {reason}"
                 );
             }
             other => panic!("expected Unavailable, got: {other:?}"),
@@ -92,5 +92,32 @@ mod tests {
     #[test]
     fn gemini_placeholder_id_is_gemini() {
         assert_eq!(GeminiUnimplementedProvider.id(), ProviderId::Gemini);
+    }
+
+    /// Regression guard (D-65): the Phase 2 placeholder wording must NOT
+    /// reappear after Phase 3 NO-GO finalization. If a future refactor silently
+    /// reverts the reason string to the Phase 2 phrasing, this test will fail
+    /// and flag the regression.
+    #[tokio::test]
+    #[allow(clippy::default_constructed_unit_structs)]
+    async fn gemini_error_reason_does_not_contain_old_literals() {
+        let secrets = Secrets::default();
+        let now: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let ctx = FetchCtx { now, secrets: &secrets };
+        let provider = GeminiUnimplementedProvider;
+        let err = provider.fetch(&ctx).await.unwrap_err();
+        match err {
+            ProviderError::Unavailable { reason } => {
+                assert!(
+                    !reason.contains("not yet implemented"),
+                    "reason regressed to Phase 2 wording: {reason}"
+                );
+                assert!(
+                    !reason.contains("enabled = false"),
+                    "reason regressed to Phase 2 wording: {reason}"
+                );
+            }
+            other => panic!("expected Unavailable, got: {other:?}"),
+        }
     }
 }
