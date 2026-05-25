@@ -19,6 +19,7 @@ use std::io::Write;
 
 use ahb::config::{Config, ProviderConfig, Providers};
 use ahb::engine::Engine;
+use ahb::engine::cache::RowOutcome;
 use ahb::model::ProviderId;
 use ahb::secrets::Secrets;
 
@@ -93,15 +94,17 @@ async fn engine_refresh_all_returns_canonical_order_with_claude_and_mock_enabled
         "mock (discriminant 3) MUST be last"
     );
 
-    // Both must be Ok results.
+    // Both must be Fresh results. Phase 3 Plan 02 change: Engine::refresh_all
+    // now returns Vec<(ProviderId, RowOutcome)> instead of Vec<(_, Result<_,_>)>.
+    // A successful first fetch lands as RowOutcome::Fresh(state).
     assert!(
-        results[0].1.is_ok(),
-        "claude row should be Ok with the synthetic JSONL fixture; got: {:?}",
+        matches!(results[0].1, RowOutcome::Fresh(_)),
+        "claude row should be Fresh with the synthetic JSONL fixture; got: {:?}",
         results[0].1
     );
     assert!(
-        results[1].1.is_ok(),
-        "mock row should be Ok; got: {:?}",
+        matches!(results[1].1, RowOutcome::Fresh(_)),
+        "mock row should be Fresh; got: {:?}",
         results[1].1
     );
 }

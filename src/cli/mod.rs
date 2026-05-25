@@ -15,7 +15,8 @@ pub mod tty;
 pub use tty::ColorMode;
 
 use crate::engine::Engine;
-use crate::model::ProviderId;
+use crate::engine::cache::RowOutcome;
+use crate::model::{ProviderError, ProviderId, ProviderState};
 
 /// Phase 2 Plan 02-03 — D-59 exit-code discriminant. Each `run_*` dispatch fn
 /// returns this from its `Ok` arm; `main.rs` calls `.exit_code()` and passes
@@ -129,6 +130,31 @@ pub enum Command {
     Tui,
 }
 
+/// Phase 3 Plan 02 — CLI-side translator that maps a single
+/// `RowOutcome` into the legacy `Result<ProviderState, ProviderError>` shape
+/// that `run_compact` / `run_detailed` / `run_json` still expect.
+///
+/// `RowOutcome::Stale` is unreachable from CLI because the CLI process is
+/// short-lived (D-66 / D-73): the cache is built up only during a single
+/// `Engine::refresh_all` call and a Stale verdict requires a previous
+/// successful fetch — by construction the CLI cache is always empty at the
+/// moment a transient error arrives, so the engine returns `Failed(...)` in
+/// the CLI path, not `Stale`. The `unreachable!()` is a correctness assertion
+/// pinning that invariant; it would only fire if a future refactor wired the
+/// CLI through a persistent engine instance (out-of-scope per D-66).
+pub(crate) fn outcome_to_result(outcome: RowOutcome) -> Result<ProviderState, ProviderError> {
+    match outcome {
+        RowOutcome::Fresh(state) => Ok(state),
+        // D-66 + D-73 binding: CLI cache is always empty. If this ever fires,
+        // the invariant has been broken upstream.
+        #[allow(clippy::unreachable)]
+        RowOutcome::Stale { .. } => unreachable!(
+            "CLI cache is always empty — RowOutcome::Stale cannot appear in CLI dispatch (D-66 + D-73)"
+        ),
+        RowOutcome::Failed(e) => Err(e),
+    }
+}
+
 /// Render the compact default view. One line per enabled provider; empty-state pair
 /// when no providers are configured (UI-SPEC CFG-04 + empty-state copy).
 ///
@@ -148,7 +174,14 @@ pub async fn run_compact(
     color_flag: ColorMode,
 ) -> anyhow::Result<DispatchOutcome> {
     let now = jiff::Timestamp::now();
-    let results = engine.refresh_all(now).await;
+    let outcomes = engine.refresh_all(now).await;
+    // D-66 + D-73: CLI cache is always empty → RowOutcome::Stale cannot occur.
+    // Translate to legacy `Result` shape so render_text / DispatchOutcome stay
+    // byte-identical to Phase 2.
+    let results: Vec<(ProviderId, Result<ProviderState, ProviderError>)> = outcomes
+        .into_iter()
+        .map(|(id, o)| (id, outcome_to_result(o)))
+        .collect();
 
     if results.is_empty() {
         println!("{}", render_text::EMPTY_STATE_HEADING);
@@ -199,7 +232,12 @@ pub async fn run_detailed(
     color_flag: ColorMode,
 ) -> anyhow::Result<DispatchOutcome> {
     let now = jiff::Timestamp::now();
-    let results = engine.refresh_all(now).await;
+    let outcomes = engine.refresh_all(now).await;
+    // D-66 + D-73: same translator as run_compact.
+    let results: Vec<(ProviderId, Result<ProviderState, ProviderError>)> = outcomes
+        .into_iter()
+        .map(|(id, o)| (id, outcome_to_result(o)))
+        .collect();
 
     if results.is_empty() {
         // Empty-state mirrors compact (Phase 1 LOCKED literal — shared with

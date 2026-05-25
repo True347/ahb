@@ -4,27 +4,56 @@
 //! `config.providers.*.enabled` flags; `refresh_all(now)` fans the fetch out via
 //! `fanout::refresh_all_inner` (`JoinSet` + per-adapter timeout + Pitfall L4 panic recovery).
 //!
-//! Task 1a wires the engine against `MockProvider` only. Task 1b extends `Engine::new`
-//! to push `ClaudeProvider` when `cfg.providers.claude.enabled`.
+//! Phase 3 Plan 02 adds the stale-on-error cache + per-provider TTL gating
+//! (D-66..D-72):
+//! - Engine owns a `moka::sync::Cache<ProviderId, CacheEntry>` (Q4 internal-own;
+//!   no injection point).
+//! - Engine owns `refresh_intervals: HashMap<ProviderId, Duration>` populated
+//!   from `cfg.providers.<id>.refresh_interval` (Plan 01) with clamp ≥5s (D-72)
+//!   and per-provider `DEFAULT_REFRESH_INTERVAL_SECS` fallback.
+//! - `Engine::refresh_all` now returns `Vec<(ProviderId, RowOutcome)>` (Q5):
+//!   - Pre-filters providers within TTL → emits `Fresh` straight from cache
+//!     (Option A — skip fan-out per Q3).
+//!   - Calls `fanout::refresh_all_inner` only on the elapsed-TTL subset.
+//!   - Per fanout result: `Ok` → update cache + `Fresh`; transient `Err` with
+//!     cache hit → `Stale { state, stale_age_secs }`; non-transient or
+//!     no-cache-hit → `Failed(err)`.
+//!
+//! Invariants:
+//! - `fanout::refresh_all_inner` stays a pure fan-out (Q3 architectural fit).
+//! - No `Timestamp::now()` callsite added — `now` flows in via the parameter
+//!   (BL-01 / Q8).
+//! - moka has no `time_to_live` / `time_to_idle` — eviction is purely manual
+//!   (D-66 / Pitfall 1).
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 #![warn(clippy::pedantic)]
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+
+use moka::sync::Cache;
 
 pub mod cache;
 pub mod events;
 pub mod fanout;
 
 pub use cache::{CacheEntry, RowOutcome};
+use cache::is_transient;
 pub use events::{EngineEvent, EVENT_BUFFER};
 pub use fanout::DEFAULT_PER_PROVIDER_TIMEOUT;
 
-use crate::config::Config;
-use crate::model::{ProviderError, ProviderId, ProviderState};
+use crate::config::{Config, ProviderConfig};
+use crate::model::ProviderId;
+use crate::provider::{claude, codex, gemini, mock};
 use crate::provider::Provider;
 use crate::secrets::Secrets;
+
+/// Safety floor for `refresh_interval` (D-72). Anything below this clamps up
+/// to 5s with `tracing::warn!`. Rationale: avoid local-FS hammering and avoid
+/// tripping any future-Gemini ToS heuristic on tight loops.
+const REFRESH_INTERVAL_MIN_SECS: u64 = 5;
 
 /// AHB engine. Holds the list of enabled providers + shared secrets handle. Front-ends
 /// (CLI compact line, TUI) consume it via `refresh_all(now)`.
@@ -32,16 +61,26 @@ pub struct Engine {
     providers: Vec<Arc<dyn Provider>>,
     secrets: Arc<Secrets>,
     per_provider_timeout: Duration,
+    /// Per-provider stale-on-error cache (D-66 / D-67). Pure in-memory; no TTL /
+    /// TTI configured — stale semantics are manual (D-71 / Pitfall 1). Cloning
+    /// is cheap (Arc-internal); ownership stays here.
+    cache: Cache<ProviderId, CacheEntry>,
+    /// Per-provider refresh interval. Built in `Engine::new` from
+    /// `cfg.providers.<id>.refresh_interval` with the per-provider
+    /// `DEFAULT_REFRESH_INTERVAL_SECS` fallback and the ≥5s clamp (D-72).
+    refresh_intervals: HashMap<ProviderId, Duration>,
 }
 
 impl Engine {
-    /// Build an engine from the parsed config. Phase 1 Task 1a: pushes `MockProvider`
-    /// when `cfg.providers.mock.enabled`. Codex / Gemini flags emit `tracing::debug!`
-    /// only (not implemented yet). Task 1b adds the `ClaudeProvider` branch.
+    /// Build an engine from the parsed config. Pushes one `Arc<dyn Provider>`
+    /// per `cfg.providers.<id>.enabled` flag and stores the resolved
+    /// per-provider refresh interval in `refresh_intervals` (with clamp +
+    /// `tracing::warn!` when the config value is below the 5s floor).
     #[must_use]
     #[allow(clippy::needless_pass_by_value)] // builder-style API: takes ownership of config + secrets
     pub fn new(cfg: Config, secrets: Secrets) -> Self {
         let mut providers: Vec<Arc<dyn Provider>> = Vec::new();
+        let mut refresh_intervals: HashMap<ProviderId, Duration> = HashMap::new();
 
         if cfg.providers.claude.enabled {
             // Resolve the user's HOME for ClaudeProvider's base_path. Unavailable HOME
@@ -57,6 +96,14 @@ impl Engine {
                     crate::provider::claude::CLAUDE_5H_TOKEN_LIMIT,
                 ),
             ));
+            refresh_intervals.insert(
+                ProviderId::Claude,
+                Self::resolve_interval(
+                    "claude",
+                    &cfg.providers.claude,
+                    claude::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+            );
         }
         if cfg.providers.codex.enabled {
             // Mirror the Claude branch's HOME resolution. Unavailable HOME collapses
@@ -67,6 +114,14 @@ impl Engine {
                 .map(|d| d.home_dir().to_path_buf())
                 .unwrap_or_default();
             providers.push(Arc::new(crate::provider::codex::CodexProvider::new(&home)));
+            refresh_intervals.insert(
+                ProviderId::Codex,
+                Self::resolve_interval(
+                    "codex",
+                    &cfg.providers.codex,
+                    codex::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+            );
         }
         if cfg.providers.gemini.enabled {
             // CR-01 fix: mirror the Claude / Codex branch and push a real
@@ -77,15 +132,55 @@ impl Engine {
             // the documented "all configured providers failed" exit 1 — see
             // D-59 / D-61.
             providers.push(Arc::new(crate::provider::gemini::GeminiUnimplementedProvider));
+            refresh_intervals.insert(
+                ProviderId::Gemini,
+                Self::resolve_interval(
+                    "gemini",
+                    &cfg.providers.gemini,
+                    gemini::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+            );
         }
         if cfg.providers.mock.enabled {
             providers.push(Arc::new(crate::provider::mock::MockProvider));
+            refresh_intervals.insert(
+                ProviderId::Mock,
+                Self::resolve_interval(
+                    "mock",
+                    &cfg.providers.mock,
+                    mock::DEFAULT_REFRESH_INTERVAL_SECS,
+                ),
+            );
         }
 
         Self {
             providers,
             secrets: Arc::new(secrets),
             per_provider_timeout: DEFAULT_PER_PROVIDER_TIMEOUT,
+            // D-66 + Pitfall 1: no time_to_live / time_to_idle. Eviction is
+            // manual (cache.insert overwrites on success); capacity 8 comfortably
+            // exceeds the closed-set ProviderId enum (4 variants today).
+            cache: Cache::builder().max_capacity(8).build(),
+            refresh_intervals,
+        }
+    }
+
+    /// Resolve a single provider's refresh interval: `None` → per-provider
+    /// default; `Some(raw)` < 5s → clamp to 5s + `tracing::warn!`; otherwise
+    /// pass through as `Duration::from_secs(raw)`.
+    fn resolve_interval(id_str: &str, pc: &ProviderConfig, default_secs: u64) -> Duration {
+        let Some(raw) = pc.refresh_interval else {
+            return Duration::from_secs(default_secs);
+        };
+        if raw < REFRESH_INTERVAL_MIN_SECS {
+            tracing::warn!(
+                provider = id_str,
+                raw = raw,
+                "refresh_interval clamped to 5s"
+            );
+            Duration::from_secs(REFRESH_INTERVAL_MIN_SECS)
+        } else {
+            Duration::from_secs(raw)
         }
     }
 
@@ -96,26 +191,110 @@ impl Engine {
     }
 
     /// Fan out one fetch across all enabled providers. Returns
-    /// `Vec<(ProviderId, Result<ProviderState, ProviderError>)>` in canonical
-    /// `ProviderId` order (Claude=0, Codex=1, Gemini=2, Mock=3) regardless of which
-    /// adapter completed first — fanout produces arrival order, the engine sorts
-    /// to satisfy the UI-SPEC fixed-row contract (BL-02 fix).
-    pub async fn refresh_all(
-        &self,
-        now: jiff::Timestamp,
-    ) -> Vec<(ProviderId, Result<ProviderState, ProviderError>)> {
-        let mut results = fanout::refresh_all_inner(
-            &self.providers,
-            now,
-            Arc::clone(&self.secrets),
-            self.per_provider_timeout,
-        )
-        .await;
-        // BL-02: canonical row order lives at the engine boundary — single source of
-        // truth. Fanout still advertises arrival order; CLI / TUI consumers do not
-        // re-sort.
-        results.sort_by_key(|(id, _)| Self::sort_key(*id));
-        results
+    /// `Vec<(ProviderId, RowOutcome)>` in canonical `ProviderId` order
+    /// (Claude=0, Codex=1, Gemini=2, Mock=3). For each provider:
+    /// - TTL not elapsed (`now < last_fetch_at + refresh_interval`) → emit
+    ///   `RowOutcome::Fresh(cached_state)` straight from cache (Option A —
+    ///   skip fan-out per Q3).
+    /// - TTL elapsed → call `fanout::refresh_all_inner` on the elapsed subset.
+    ///   For each fanout result:
+    ///   - `Ok(state)` → update cache + emit `Fresh(state)`.
+    ///   - `Err(e) if is_transient(&e)` + cache hit → emit
+    ///     `Stale { state, stale_age_secs }`.
+    ///   - `Err(e)` non-transient or no cache hit → emit `Failed(e)`.
+    ///
+    /// Order: results sorted by `Self::sort_key` so CLI/TUI consumers receive
+    /// canonical row order regardless of fanout arrival order (BL-02).
+    pub async fn refresh_all(&self, now: jiff::Timestamp) -> Vec<(ProviderId, RowOutcome)> {
+        // Partition providers: TTL hit → emit Fresh from cache; TTL elapsed
+        // (or no cache yet) → must fetch. Q3 Option A pre-filter.
+        let mut from_cache: Vec<(ProviderId, RowOutcome)> = Vec::new();
+        let mut needs_fetch: Vec<Arc<dyn Provider>> = Vec::new();
+
+        for p in &self.providers {
+            let id = p.id();
+            let interval = self
+                .refresh_intervals
+                .get(&id)
+                .copied()
+                .unwrap_or(Duration::from_secs(15));
+            // Compute "is TTL still in window?" via the cache entry's fetched_at
+            // + interval vs now. If no entry, we must fetch.
+            let mut hit_fresh = false;
+            if let Some(entry) = self.cache.get(&id) {
+                let elapsed = duration_since(now, entry.fetched_at);
+                if elapsed < interval {
+                    from_cache.push((id, RowOutcome::Fresh(entry.state.clone())));
+                    hit_fresh = true;
+                }
+            }
+            if !hit_fresh {
+                needs_fetch.push(Arc::clone(p));
+            }
+        }
+
+        // Call fanout only on providers whose TTL has elapsed (or have no cache
+        // entry yet). When `needs_fetch` is empty, skip the await entirely —
+        // emit only the cached `Fresh` rows. Pitfall 16: even when all
+        // providers are within TTL, we must still emit one row per provider
+        // (NOT an empty Vec). The `from_cache` accumulator does that.
+        let fanout_results = if needs_fetch.is_empty() {
+            Vec::new()
+        } else {
+            fanout::refresh_all_inner(
+                &needs_fetch,
+                now,
+                Arc::clone(&self.secrets),
+                self.per_provider_timeout,
+            )
+            .await
+        };
+
+        // Map fanout results into RowOutcome + write cache on success.
+        let mut from_fetch: Vec<(ProviderId, RowOutcome)> = Vec::with_capacity(fanout_results.len());
+        for (id, result) in fanout_results {
+            let outcome = match result {
+                Ok(state) => {
+                    // Q8 / BL-01: cache fetched_at MUST come from state.fetched_at
+                    // (which itself comes from FetchCtx::now), NOT a fresh
+                    // jiff::Timestamp::now() call.
+                    self.cache.insert(
+                        id,
+                        CacheEntry {
+                            state: state.clone(),
+                            fetched_at: state.fetched_at,
+                        },
+                    );
+                    RowOutcome::Fresh(state)
+                }
+                Err(e) => {
+                    if is_transient(&e) {
+                        if let Some(entry) = self.cache.get(&id) {
+                            let stale_age_secs = duration_since(now, entry.fetched_at).as_secs();
+                            RowOutcome::Stale {
+                                state: entry.state.clone(),
+                                stale_age_secs,
+                            }
+                        } else {
+                            // Transient but no cache to fall back on → Failed.
+                            RowOutcome::Failed(e)
+                        }
+                    } else {
+                        RowOutcome::Failed(e)
+                    }
+                }
+            };
+            from_fetch.push((id, outcome));
+        }
+
+        // Combine cache-hit rows + fetch-result rows, then sort by canonical
+        // ProviderId order (BL-02).
+        let mut combined: Vec<(ProviderId, RowOutcome)> =
+            Vec::with_capacity(from_cache.len() + from_fetch.len());
+        combined.extend(from_cache);
+        combined.extend(from_fetch);
+        combined.sort_by_key(|(id, _)| Self::sort_key(*id));
+        combined
     }
 
     /// Canonical row order for `refresh_all` output. Mock is last because it is
@@ -129,13 +308,60 @@ impl Engine {
             ProviderId::Mock => 3,
         }
     }
+
+    /// Test affordance: returns the stored refresh interval for the given
+    /// provider id, or `None` if the provider was not enabled in the config
+    /// passed to `Engine::new`. Used by the D-72 clamp test to assert that the
+    /// stored value reflects the safety floor after parse.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn refresh_interval_for(&self, id: ProviderId) -> Option<Duration> {
+        self.refresh_intervals.get(&id).copied()
+    }
+
+    /// Test affordance: build an `Engine` directly from a provider list +
+    /// per-provider refresh intervals, bypassing `Config`-based construction.
+    /// Used by the in-file behavioral tests so they can plug in stateful
+    /// providers (`ScriptedProvider`) without going through the config
+    /// machinery.
+    ///
+    /// Production code MUST use `Engine::new(cfg, secrets)` — this constructor
+    /// is `pub(crate)` and `#[cfg(test)]`-only by intent.
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        providers: Vec<Arc<dyn Provider>>,
+        secrets: Secrets,
+        refresh_intervals: HashMap<ProviderId, Duration>,
+    ) -> Self {
+        Self {
+            providers,
+            secrets: Arc::new(secrets),
+            per_provider_timeout: DEFAULT_PER_PROVIDER_TIMEOUT,
+            cache: Cache::builder().max_capacity(8).build(),
+            refresh_intervals,
+        }
+    }
+}
+
+/// Compute `now - earlier` as a non-negative `Duration`. Negative spans (clock
+/// going backwards or earlier-after-now) clamp to zero. Pattern matches the
+/// `format_countdown` style in `src/cli/render_text.rs`.
+fn duration_since(now: jiff::Timestamp, earlier: jiff::Timestamp) -> Duration {
+    let secs: u64 = now
+        .since((jiff::Unit::Second, earlier))
+        .ok()
+        .map(|span| span.get_seconds())
+        .and_then(|s| u64::try_from(s.max(0)).ok())
+        .unwrap_or(0);
+    Duration::from_secs(secs)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{Config, ProviderConfig, Providers};
-    use crate::model::{HpWindow, NetworkErr, ResetInfo};
+    use crate::model::{HpWindow, NetworkErr, ProviderError, ProviderState, ResetInfo};
+    use crate::provider::FetchCtx;
     use async_trait::async_trait;
     use std::borrow::Cow;
     use std::sync::Mutex;

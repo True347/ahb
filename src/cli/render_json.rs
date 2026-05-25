@@ -254,7 +254,14 @@ pub async fn run_json(
     _color_flag: ColorMode,
 ) -> anyhow::Result<DispatchOutcome> {
     let now = jiff::Timestamp::now();
-    let results = engine.refresh_all(now).await;
+    let outcomes = engine.refresh_all(now).await;
+    // D-66 + D-73: CLI cache is always empty → translate RowOutcome → Result
+    // so to_json_root and DispatchOutcome stay byte-identical to Phase 2
+    // (schema_version: 1 unchanged per D-68).
+    let results: Vec<(ProviderId, Result<ProviderState, ProviderError>)> = outcomes
+        .into_iter()
+        .map(|(id, o)| (id, crate::cli::outcome_to_result(o)))
+        .collect();
 
     // WR-06: the prior `let _color_ignored = tty::should_colorize_env(...)`
     // binding has been removed. `should_colorize_env(_, true)` is documented
