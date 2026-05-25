@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-05-25T11:40:13.377Z"
+stopped_at: "Completed 03-03 (RowState::StaleOk + build_stale_ok_line + SCAFFOLD removed)"
+last_updated: "2026-05-25T11:49:13.976Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 60
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 03 (gemini-conditional-cache-refresh-policy) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-25
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [█████████░] 88%
 | Phase Phase 03-gemini-conditional-cache-refresh-policy PP01 | 3min | 3 tasks | 8 files |
 | Phase 03 P02 | 11m | 3 tasks | 8 files |
 | Phase 03 P04 | 2m20s | 2 tasks | 4 files |
+| Phase 03-gemini-conditional-cache-refresh-policy P03 | 18m | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,10 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 03-04]: GeminiUnimplementedProvider error reason locked to D-65 literal 'Gemini adapter deferred to v2 — see README §Gemini status'; regression test pins negative assertion against Phase 2 wording revert
 - [Phase ?]: [Phase 03-04]: README.md created (didn't exist) with locked '## Gemini adapter status — deferred to v2' section per D-65 + SC-2 ToS warning; default-config.toml comment per D-64; three-source literal alignment makes the deferral message grep-discoverable across error/config/docs
 - [Phase ?]: [Phase 03-04] Rule 1 deviation: tests/exit_codes.rs::exit_code_1_when_only_gemini_enabled assertion rotated from 'not yet implemented' to 'Gemini adapter deferred to v2' — knock-on edit forced by D-65 reason change (4th file beyond plan's declared 3)
+- [Phase ?]: Plan 03-03: RowState::StaleOk { state, stale_age_secs: u64 } variant added (D-70) — stale-age lives in row state, NOT in ProviderState; JSON wire shape unchanged
+- [Phase ?]: Plan 03-03: build_stale_ok_line is SIBLING of build_ok_line not a wrapper (RESEARCH Q6) — ratatui 0.30 per-Span style takes precedence; Color::Yellow applied directly to each styled span
+- [Phase ?]: Plan 03-03 Rule 3 deviation: Task 2 SCAFFOLD removal bundled into Task 1 GREEN commit because cargo build --lib acceptance criterion forced cascade; mirrors Plan 03-02 Task 2 cli/tui cascade bundle
+- [Phase ?]: Plan 03-03: stale suffix is Span::raw (unstyled) not Span::styled(Yellow) per D-69 reading — bar color signals staleness; --color=never paths preserve semantic text for machine consumers regardless of color support
 
 ### Pending Todos
 
@@ -154,6 +159,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T11:39:43.500Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-05-25T11:49:13.957Z
+Stopped at: Completed 03-03 (RowState::StaleOk + build_stale_ok_line + SCAFFOLD removed)
 Resume file: None
