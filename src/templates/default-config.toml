@@ -9,4 +9,4 @@ enabled = false  # Claude Code subscription — reads ~/.claude/projects/**/*.js
 enabled = false  # Codex CLI subscription — reads ~/.codex/sessions/**/rollout-*.jsonl + state_*.sqlite (read-only)
 
 [providers.gemini]
-enabled = false  # Gemini CLI subscription — not yet implemented (Phase 3)
+enabled = false  # Gemini CLI subscription — deferred to v2 stub (see README §Gemini status)
