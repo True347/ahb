@@ -37,13 +37,40 @@ pub(crate) fn to_hp_windows(rate_limits: &RateLimits, line_ts: jiff::Timestamp) 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
 fn tier_to_window(label: &'static str, tier: &RateLimitTier, line_ts: jiff::Timestamp) -> HpWindow {
     let percent_remaining = (100.0 - tier.used_percent as f32).clamp(0.0, 100.0);
-    // Rollout `resets_in_seconds` is a u64; jiff::Span seconds take i64. Saturating
-    // cast: any value above i64::MAX collapses to i64::MAX (multi-billion years).
+    // WR-02: `Span::seconds(i64::MAX)` itself panics — the valid range per
+    // jiff 0.2 is roughly ±631_107_417_600s (~20_000 years). Clamp BEFORE
+    // we hand the value to `Span::seconds`, otherwise an absurd upstream
+    // value crashes the adapter instead of degrading. `JIFF_SECONDS_MAX` is
+    // a generous ceiling (centuries) — practically unreachable for sane
+    // Codex data (rollouts emit values in the 17000s range), but the
+    // clamp + warn means we surface drift instead of panicking.
+    //
+    // After the clamp, `checked_add` can still legitimately overflow when
+    // `line_ts` is itself near the representable Timestamp boundary; that
+    // path remains a warn + fall back to `line_ts` (countdown renders
+    // `0h00m`, which is consistent with the existing "render something
+    // rather than crash" stance for adapter edge cases).
+    const JIFF_SECONDS_MAX: i64 = 631_107_417_600;
+    let raw_secs = tier.resets_in_seconds;
     #[allow(clippy::cast_possible_wrap)]
-    let secs = i64::try_from(tier.resets_in_seconds).unwrap_or(i64::MAX);
+    let clamped_secs = i64::try_from(raw_secs).unwrap_or(JIFF_SECONDS_MAX).min(JIFF_SECONDS_MAX);
+    if i128::from(clamped_secs) < i128::from(raw_secs) {
+        tracing::warn!(
+            "codex rate_limits.{label}.resets_in_seconds={raw_secs} exceeds jiff::Span \
+             representable range; clamping to {JIFF_SECONDS_MAX}s before anchor \
+             arithmetic (countdown will render as the clamped value)"
+        );
+    }
     let resets_at = line_ts
-        .checked_add(jiff::Span::new().seconds(secs))
-        .unwrap_or(line_ts);
+        .checked_add(jiff::Span::new().seconds(clamped_secs))
+        .unwrap_or_else(|err| {
+            tracing::warn!(
+                "codex rate_limits.{label}.resets_in_seconds={raw_secs} overflowed Timestamp \
+                 arithmetic from line_ts={line_ts} ({err}); falling back to line_ts \
+                 (countdown will read 0h00m)"
+            );
+            line_ts
+        });
     HpWindow {
         label: Cow::Borrowed(label),
         percent_remaining,
@@ -154,6 +181,37 @@ mod tests {
         assert!(
             (windows[0].percent_remaining - 100.0).abs() < 0.01,
             "negative used_percent should clamp to 100% remaining"
+        );
+    }
+
+    // WR-02: absurdly large `resets_in_seconds` must NOT panic. Pre-fix
+    // `Span::seconds(i64::MAX)` itself panics inside jiff (valid range is
+    // ±631_107_417_600s ≈ ±20_000 years). Post-fix the adapter clamps to
+    // `JIFF_SECONDS_MAX` BEFORE handing the value to `Span::seconds`, then
+    // proceeds with `checked_add` as the second line of defense. The
+    // accompanying `tracing::warn!` is observability-only and not asserted
+    // here (no tracing-test machinery wired up for this crate).
+    #[test]
+    fn absurd_resets_in_seconds_does_not_panic_and_yields_sane_window() {
+        let line_ts: jiff::Timestamp = "2026-05-25T12:00:00Z".parse().unwrap();
+        let rl = RateLimits {
+            primary: Some(tier(50.0, u64::MAX)),
+            secondary: None,
+        };
+        // The key invariant: this must not panic. (Pre-fix it did.)
+        let windows = to_hp_windows(&rl, line_ts);
+        assert_eq!(windows.len(), 1);
+        // Percent and label are unaffected by the clamp.
+        assert_eq!(windows[0].label, "primary");
+        assert!((windows[0].percent_remaining - 50.0).abs() < 0.01);
+        // resets_at is either `line_ts + ~20_000 years` (clamp succeeded +
+        // checked_add succeeded) or `line_ts` (checked_add fell back).
+        // Both are acceptable per the fix; the test asserts only that the
+        // anchor is >= line_ts (never goes backwards in time).
+        assert!(
+            windows[0].reset.resets_at >= line_ts,
+            "anchor must not regress past line_ts on overflow: got {}",
+            windows[0].reset.resets_at
         );
     }
 }
