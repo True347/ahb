@@ -10,11 +10,11 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Core (CLI Entry)
 
 - [x] **CORE-01**: 不帶 argument 跑 `AHB` 預設輸出所有設定 provider 的緊湊一行 HP bar（含 % + reset 倒數）
-- [ ] **CORE-02**: `AHB --compact` 強制緊湊輸出
+- [x] **CORE-02**: `AHB --compact` 強制緊湊輸出
 - [x] **CORE-03**: `AHB --detailed` 多行 per provider，含 session 與 weekly 兩條 bar
-- [ ] **CORE-04**: `AHB --json` 輸出帶 `schema_version: 1` 的穩定 JSON 結構，安全可供 tmux / Starship / shell pipeline 消費
+- [x] **CORE-04**: `AHB --json` 輸出帶 `schema_version: 1` 的穩定 JSON 結構，安全可供 tmux / Starship / shell pipeline 消費
 - [x] **CORE-05**: CLI 在非 TTY（被 pipe）情境下自動關閉色彩、ANSI escape；尊重 `NO_COLOR` 環境變數
-- [ ] **CORE-06**: 適當 exit code — 0 表示至少一個 provider 正常；1 表示全部 provider 失敗；2 表示 config / secrets 不可用
+- [x] **CORE-06**: 適當 exit code — 0 表示至少一個 provider 正常；1 表示全部 provider 失敗；2 表示 config / secrets 不可用
 
 ### TUI
 
@@ -35,7 +35,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **SEC-01**: 所有 provider 認證（cookie、token、session id）一律存進 OS keyring（`keyring-core` 1.0；macOS Keychain / Win Cred Manager / Linux Secret Service）
 - [x] **SEC-02**: 內部以 `Secret<T>` newtype 包裝，`Debug` 自動 redact、`#[serde(skip)]` 防意外序列化
-- [ ] **SEC-03**: `--json` / log / error message 中絕不出現原始 secret 值（CI grep 測試守住）
+- [x] **SEC-03**: `--json` / log / error message 中絕不出現原始 secret 值（CI grep 測試守住）
 - [x] **SEC-04**: 純無 secret 的 provider（如 Claude Code 純讀本地）仍走相同介面（不破壞統一 contract）
 
 ### Provider Adapters
@@ -100,11 +100,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CORE-01 | Phase 1 | Complete |
-| CORE-02 | Phase 2 | Pending |
+| CORE-02 | Phase 2 | Complete |
 | CORE-03 | Phase 2 | Complete |
-| CORE-04 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Complete |
 | CORE-05 | Phase 1 | Complete |
-| CORE-06 | Phase 2 | Pending |
+| CORE-06 | Phase 2 | Complete |
 | TUI-01 | Phase 1 | Complete |
 | TUI-02 | Phase 1 | Complete |
 | TUI-03 | Phase 3 | Pending |
@@ -116,7 +116,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CFG-04 | Phase 1 | Complete |
 | SEC-01 | Phase 1 | Complete |
 | SEC-02 | Phase 1 | Complete |
-| SEC-03 | Phase 2 | Pending |
+| SEC-03 | Phase 2 | Complete |
 | SEC-04 | Phase 1 | Complete |
 | ADP-00 | Phase 0 | Complete |
 | ADP-01 | Phase 1 | Complete |

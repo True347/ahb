@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Plan 02-02 complete (CORE-03 — --detailed + Claude weekly bar)
-last_updated: "2026-05-25T03:30:15.095Z"
+status: verifying
+stopped_at: Phase 02-codex-output-formats COMPLETE (Plan 02-03 closes Phase 2 — CORE-02 + CORE-04 + CORE-06 + SEC-03 all green; all 4 ROADMAP success criteria verified)
+last_updated: "2026-05-25T05:24:41.047Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 11
-  percent: 40
+  completed_plans: 12
+  percent: 60
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 
 Phase: 02 (codex-output-formats) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-25
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [█████████░] 92%
 | Phase 01-engine-claude-tui-scaffold P04 P01-04 | 22min | 4 tasks | 10 files |
 | Phase 02-codex-output-formats P01 | 25min | 2 tasks | 14 files |
 | Phase 02-codex-output-formats P02 | 12min | 2 tasks | 11 files |
+| Phase 02-codex-output-formats P03 | 18min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Recent decisions affecting current work:
 - [Phase 02-codex-output-formats]: Plan 02-02: CLAUDE_WEEKLY_TOKEN_LIMIT locked at None for Phase 2 (no reliable estimate); NaN sentinel + (limit unknown) footer distinct from SchemaDrift
 - [Phase 02-codex-output-formats]: Plan 02-02: Claude weekly anchor = ISO-week Monday 00:00 LOCAL via jiff to_monday_one_offset; WeekAnchor enum locks type shape for future FirstPrompt variant
 - [Phase 02-codex-output-formats]: Plan 02-02 Rule 1 bug: jiff::Timestamp rejects calendar Span units at runtime; use Span::hours(N*24) on Timestamp OR Date.checked_add(Span::days) on civil dates
+- [Phase 02-codex-output-formats]: Plan 02-03 D-49..D-52 + D-57..D-62: locked v1 JSON wire shape (schema_version=1 + integer epoch generated_at/fetched_at/reset_at + BL-02 providers ordering); clap ArgGroup multiple=false for --compact/--detailed/--json mutual exclusion; DispatchOutcome::{AnySuccess,AllFailed} discriminant + exit_code mapper per D-59/D-60; after_help docs exit codes per D-61; debug_emit_fake_secret_and_exit(as_json: bool) extends SEC-03 grep coverage to --json route per D-62
+- [Phase 02-codex-output-formats]: Plan 02-03 Rule 1 fix: generated_at is serialized as Unix epoch integer via jiff timestamp::second::required (matches Phase 0 fetched_at/resets_at adapter), NOT RFC3339 string. CONTEXT D-50 example showed RFC3339 illustratively but locked RESEARCH DTO uses integer adapter. v1 schema commits to integer epoch; consumers use jq from_unixtime for RFC3339
+- [Phase 02-codex-output-formats]: Plan 02-03 Rule 1 fix: two pre-Phase-2 integration tests (cli_walking_skeleton::ahb_with_broken_claude_config + schema_drift_sentinel) asserted .success() on Claude-only-fails scenarios that are now exit 1 per D-59/D-60. Updated to assert output.status.code()==Some(1). User-visible row + sentinel literal invariants preserved byte-identical
 
 ### Pending Todos
 
@@ -136,6 +140,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T03:29:48.886Z
-Stopped at: Plan 02-02 complete (CORE-03 — --detailed + Claude weekly bar)
+Last session: 2026-05-25T05:24:41.022Z
+Stopped at: Phase 02-codex-output-formats COMPLETE (Plan 02-03 closes Phase 2 — CORE-02 + CORE-04 + CORE-06 + SEC-03 all green; all 4 ROADMAP success criteria verified)
 Resume file: None
