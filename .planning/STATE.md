@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-05-25T11:16:27.176Z"
+last_updated: "2026-05-25T11:33:05.655Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 60
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 03 (gemini-conditional-cache-refresh-policy) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-05-25
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [████████░░] 76%
 | Phase 02-codex-output-formats P02 | 12min | 2 tasks | 11 files |
 | Phase 02-codex-output-formats P03 | 18min | 2 tasks | 9 files |
 | Phase Phase 03-gemini-conditional-cache-refresh-policy PP01 | 3min | 3 tasks | 8 files |
+| Phase 03 P02 | 11m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-01: ProviderConfig adds refresh_interval: Option<u64> with #[serde(default)]; KNOWN_PROVIDER_FIELD_KEYS gains 'refresh_interval' so D-38 walker is silent on the new key; clamp ≥5s deliberately deferred to Engine::new (Plan 02) per layered-validation pattern
 - [Phase ?]: Plan 03-01: DEFAULT_REFRESH_INTERVAL_SECS = 15 lives per-provider-module (claude/codex/gemini/mock) not in shared module per D-72; gemini stub value is cosmetic (cache never populated) but kept for parity so Engine::new can import uniformly
 - [Phase ?]: Plan 03-01 Rule 3 deviation: 7 pre-existing ProviderConfig { enabled: true } struct-literals in src/engine + src/cli + tests/engine_row_order got ..Default::default() — minimal fix; ProviderConfig already derived Default
+- [Phase ?]: Plan 03-02: Engine owns moka::sync::Cache internally (Q4) — no injection point; tests use #[cfg(test)] pub(crate) Engine::new_for_test to plug stateful providers. Cache trait abstraction deferred to v2.
+- [Phase ?]: Plan 03-02: Engine::refresh_all picks Q3 Option A (pre-filter + skip fanout for TTL-hit providers) per D-72/D-73; Pitfall 16 honored — all-cache pass still emits one row per provider, not empty Vec.
+- [Phase ?]: Plan 03-02: cli::outcome_to_result Stale arm = unreachable!() with #[should_panic] test pinning D-66+D-73 invariant (CLI cache always empty); moka cache uses max_capacity(8) with no TTL/TTI (manual stale semantics per D-71).
+- [Phase ?]: Plan 03-02 Rule 3 deviation: cli + tui scaffold bundled into Task 2 GREEN (cb18343) because cargo build --lib is a Task 2 acceptance criterion and Engine::refresh_all return-type change cascades into cli/render_json/tui callers; Task 3 (0732130) adds outcome_to_result unit tests.
 
 ### Pending Todos
 
@@ -145,6 +150,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T11:16:02.299Z
+Last session: 2026-05-25T11:32:54.269Z
 Stopped at: Phase 3 context gathered
 Resume file: None

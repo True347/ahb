@@ -128,7 +128,7 @@ Plans:
   3. Per-provider `refresh_interval` in `config.toml` overrides the global TUI tick; setting Gemini to 600s while Claude/Codex stay at 15s produces the expected polling cadence (verified by wiremock-based integration tests covering 200 / 304 / 401 / 429+Retry-After / 500 / slow-response paths).
   4. When a network adapter errors transiently, the engine serves the last successful `ProviderState` from cache with a visible "(stale Ns ago)" indicator instead of blanking the row; the cache TTL is decoupled from the refresh interval.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 **Wave 1** *(parallel)*
 
@@ -136,7 +136,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — moka dep + CacheEntry/RowOutcome/is_transient + Engine::refresh_all rewrite + CLI dispatch update (TUI-03 core) [wave 2]
+- [x] 03-02-PLAN.md — moka dep + CacheEntry/RowOutcome/is_transient + Engine::refresh_all rewrite + CLI dispatch update (TUI-03 core) [wave 2]
 - [ ] 03-04-PLAN.md — Gemini stub error reason + default-config comment + README §Gemini status (ADP-05) [wave 2] *(moved to Wave 2 to avoid src/provider/gemini.rs parallel-write conflict with 03-01)*
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -172,7 +172,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
 | 1. Engine + Claude + TUI Scaffold | 4/4 | Complete   | 2026-05-23 |
 | 2. Codex + Output Formats | 3/3 | Complete   | 2026-05-25 |
-| 3. Gemini (conditional) + Cache & Refresh Policy | 1/5 | In Progress|  |
+| 3. Gemini (conditional) + Cache & Refresh Policy | 2/5 | In Progress|  |
 | 4. Distribution & Release Polish | 0/TBD | Not started | - |
 
 ---
