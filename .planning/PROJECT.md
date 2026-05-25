@@ -14,19 +14,18 @@ AHB 是一個用 Rust 寫的 CLI + TUI 工具，把多家 LLM 訂閱（Claude Co
 
 <!-- Shipped and confirmed valuable. -->
 
-(None yet — ship to validate)
+- [x] CLI `AHB` 不帶 argument，預設輸出所有設定 provider 的緊湊一行 HP bar（含 % 與 reset 倒數）— Validated in Phase 2 (CORE-02, explicit `--compact` flag + default compact route)
+- [x] CLI 支援 `--compact` / `--detailed` / `--json` flag 切換輸出格式 — Validated in Phase 2 (CORE-02 / CORE-03 / CORE-04, `--json` 鎖 `schema_version: 1`，clap `ArgGroup` 三選一互斥)
+- [x] 支援 Codex CLI 訂閱的 session 額度 + reset 時間取得 — Validated in Phase 2 (ADP-04, rusqlite read-only + JSONL rollouts + `SchemaDrift` 邊界)
 
 ### Active
 
 <!-- v1 hypotheses. Building toward these. -->
 
-- [ ] CLI `AHB` 不帶 argument，預設輸出所有設定 provider 的緊湊一行 HP bar（含 % 與 reset 倒數）
-- [ ] CLI 支援 `--compact` / `--detailed` / `--json` flag 切換輸出格式
 - [ ] TUI mode（`AHB tui` 或同等）顯示固定畫面、定時自動更新
 - [ ] TUI refresh 頻率可由 config 設定，預設 15s
 - [ ] Config 檔指定要追蹤的 provider 清單與其認證 / 來源設定，支援多 provider 同時啟用
 - [ ] 支援 Claude Code 訂閱的 session 額度 + reset 時間取得
-- [ ] 支援 Codex CLI 訂閱的 session 額度 + reset 時間取得
 - [ ] 支援 Gemini CLI 訂閱的 session 額度 + reset 時間取得（資料來源候選：`gemini.google.com/usage`，需 spike 驗證 auth / 回應格式）
 - [ ] 單一靜態 binary 分發（cargo install 或 release artifact），無 runtime 依賴
 
@@ -88,4 +87,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-23 after Phase 1 (Engine + Claude + TUI Scaffold) completion — 5/5 must-haves verified, 3 platform-bound items deferred to 01-HUMAN-UAT.md*
+*Last updated: 2026-05-25 after Phase 2 (Codex + Output Formats) completion — 4/4 must-haves verified, 3 Active requirements promoted to Validated (CORE-02 default compact + ArgGroup, CORE-03/04 detailed/json formats, ADP-04 Codex adapter)*
