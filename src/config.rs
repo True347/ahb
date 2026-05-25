@@ -240,4 +240,53 @@ mod tests {
         assert!(!cfg.providers.codex.enabled);
         assert!(!cfg.providers.gemini.enabled);
     }
+
+    // ---- Phase 3 Plan 01 Task 1: refresh_interval (CFG-03, D-72) ----
+
+    #[test]
+    fn provider_config_refresh_interval_parses_value() {
+        // CFG-03 / D-72: TOML `refresh_interval = 30` must deserialize to Some(30).
+        let cfg: Config = toml::from_str(
+            "[providers.claude]\nenabled = true\nrefresh_interval = 30\n",
+        )
+        .unwrap();
+        assert!(cfg.providers.claude.enabled);
+        assert_eq!(cfg.providers.claude.refresh_interval, Some(30));
+    }
+
+    #[test]
+    fn provider_config_refresh_interval_absent_is_none() {
+        // D-72: absent `refresh_interval` deserializes to None — engine then uses
+        // the per-provider DEFAULT_REFRESH_INTERVAL_SECS.
+        let cfg: Config =
+            toml::from_str("[providers.claude]\nenabled = true\n").unwrap();
+        assert!(cfg.providers.claude.enabled);
+        assert_eq!(cfg.providers.claude.refresh_interval, None);
+    }
+
+    #[test]
+    fn provider_config_refresh_interval_zero_is_accepted_by_parser() {
+        // D-72: clamp ≥ 5s is Engine's job (Plan 02). The parse layer accepts
+        // any valid u64 including 0 — no sentinel meaning at this layer.
+        let cfg: Config = toml::from_str(
+            "[providers.claude]\nenabled = true\nrefresh_interval = 0\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.providers.claude.refresh_interval, Some(0));
+    }
+
+    #[test]
+    fn provider_config_known_key_refresh_interval_does_not_warn() {
+        // KNOWN_PROVIDER_FIELD_KEYS must contain "refresh_interval" so the
+        // D-38 forward-compat warn-walker does NOT emit a noisy warning for
+        // this newly-added field. The live warn path is exercised in the
+        // integration test (tests/refresh_interval_config_parse.rs); here we
+        // assert the array contents directly.
+        assert!(
+            KNOWN_PROVIDER_FIELD_KEYS.contains(&"refresh_interval"),
+            "KNOWN_PROVIDER_FIELD_KEYS must include \"refresh_interval\" — got {KNOWN_PROVIDER_FIELD_KEYS:?}"
+        );
+        // And the typo variant must NOT be in the allow-list (sanity-check):
+        assert!(!KNOWN_PROVIDER_FIELD_KEYS.contains(&"refresh_intervall"));
+    }
 }
