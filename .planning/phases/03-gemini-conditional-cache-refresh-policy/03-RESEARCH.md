@@ -535,17 +535,19 @@ Slice 4 has zero dependency on 1/2/3 — can be done first or last. Slice 1 must
 | A4 | Phase 3 cache 永遠 read-only in CLI dispatch path (CLI cache 永遠空) | Q5 / Slice 2 | If CLI dispatch accidentally writes cache, breaks D-66; mitigated by Engine::refresh_all being the ONLY write site and CLI being short-lived (process dies before cache reuse). |
 | A5 | `is_transient` should NOT include `Unavailable` even though adapter timeout currently maps there | Q2 / Pitfall 6 | If users complain that 2-second adapter timeouts should yield stale fallback, would need to either widen `is_transient(Unavailable)` (loses Gemini-stub discrimination) or change timeout to its own variant. Document in PLAN.md as Phase 3.5 fodder if it comes up. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **(a) vs (b) in Q3 — pre-filter+skip-fanout vs always-fanout-and-choose?**
    - What we know: CONTEXT D-72 + D-73 strongly imply (a). D-71's "language: rate-limit cap" reads as "don't fetch if within TTL".
    - What's unclear: (a) is the obviously-correct behavior; (b) is the obviously-easier implementation. Picking (a) means `Engine::refresh_all` skips fan-out for providers within TTL — cleaner UX, slightly more complex logic.
    - Recommendation: Implement (a). If (b) accidentally ships, it's still correct per D-71 (the TTL filter just decides what to return); user-visible behavior identical assuming fetch is fast.
+   - RESOLVED: Plan 03-02 picked Option A (pre-filter and skip fan-out for TTL-hit providers). Engine::refresh_all partitions providers into needs_fetch vs from_cache before calling fanout::refresh_all_inner.
 
 2. **README §Gemini status — exact wording for the v2 trigger sentence?**
    - What we know: D-65 LOCKS the section title and the basic structure (two paragraphs + ToS sentence).
    - What's unclear: exact prose of the v2 trigger condition (probably "see GEMINI_SPIKE.md § Kill criteria" link, but planner should confirm with the spike doc's actual section name).
    - Recommendation: Read `GEMINI_SPIKE.md § Kill criteria` (or whatever the actual section is named — verified at `.planning/research/GEMINI_SPIKE.md` lines 154-161) and quote-link in the README.
+   - RESOLVED: Plan 03-04 Task 2 specifies the v2 trigger sentence as: "The v2 adapter will be re-spiked when one of the conditions in `GEMINI_SPIKE.md § Kill criteria` is met (e.g., gemini-cli exposes a non-interactive /stats entry point, or a stable stats endpoint with documented schema becomes available)."
 
 ## Environment Availability
 
