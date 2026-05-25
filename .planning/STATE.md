@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-05-25T03:11:40.711Z"
+stopped_at: Plan 02-02 complete (CORE-03 — --detailed + Claude weekly bar)
+last_updated: "2026-05-25T03:30:15.095Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 40
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 02 (codex-output-formats) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-25
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 83%
 | Phase 01-engine-claude-tui-scaffold P03 | 12min | 2 tasks | 12 files |
 | Phase 01-engine-claude-tui-scaffold P04 P01-04 | 22min | 4 tasks | 10 files |
 | Phase 02-codex-output-formats P01 | 25min | 2 tasks | 14 files |
+| Phase 02-codex-output-formats P02 | 12min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 02-01 ADP-04: CodexProvider end-to-end — read-only sqlite (zero SELECT, busy_timeout 250ms) + JSONL rate_limits parse + spawn_blocking narrow wrap
 - [Phase ?]: Plan 02-01 Rule 2 deviation: compact_line row label now sourced from id_label(state.id), not windows[0].label — UI-SPEC line 141 binding; Mock compact flips from 'mock-session  …' to 'mock  …'
 - [Phase ?]: Plan 02-01: SchemaDrift sentinel generalized via id_label_titlecase in BOTH cli/render_text.rs and tui/widgets/hp_row.rs; Claude byte-identical to Phase 1; pre-existing TUI bug (Codex drift falsely claiming 'Claude adapter…') fixed
+- [Phase 02-codex-output-formats]: Plan 02-02: HpWindow.detailed_label additive field (D-52) — preserves Phase 0 mock-session + Phase 1 claude compact literals; JSON-additive, serde-skipped when None
+- [Phase 02-codex-output-formats]: Plan 02-02: CLAUDE_WEEKLY_TOKEN_LIMIT locked at None for Phase 2 (no reliable estimate); NaN sentinel + (limit unknown) footer distinct from SchemaDrift
+- [Phase 02-codex-output-formats]: Plan 02-02: Claude weekly anchor = ISO-week Monday 00:00 LOCAL via jiff to_monday_one_offset; WeekAnchor enum locks type shape for future FirstPrompt variant
+- [Phase 02-codex-output-formats]: Plan 02-02 Rule 1 bug: jiff::Timestamp rejects calendar Span units at runtime; use Span::hours(N*24) on Timestamp OR Date.checked_add(Span::days) on civil dates
 
 ### Pending Todos
 
@@ -131,6 +136,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T03:11:33.455Z
-Stopped at: Phase 2 context gathered
+Last session: 2026-05-25T03:29:48.886Z
+Stopped at: Plan 02-02 complete (CORE-03 — --detailed + Claude weekly bar)
 Resume file: None

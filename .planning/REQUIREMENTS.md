@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CORE-01**: 不帶 argument 跑 `AHB` 預設輸出所有設定 provider 的緊湊一行 HP bar（含 % + reset 倒數）
 - [ ] **CORE-02**: `AHB --compact` 強制緊湊輸出
-- [ ] **CORE-03**: `AHB --detailed` 多行 per provider，含 session 與 weekly 兩條 bar
+- [x] **CORE-03**: `AHB --detailed` 多行 per provider，含 session 與 weekly 兩條 bar
 - [ ] **CORE-04**: `AHB --json` 輸出帶 `schema_version: 1` 的穩定 JSON 結構，安全可供 tmux / Starship / shell pipeline 消費
 - [x] **CORE-05**: CLI 在非 TTY（被 pipe）情境下自動關閉色彩、ANSI escape；尊重 `NO_COLOR` 環境變數
 - [ ] **CORE-06**: 適當 exit code — 0 表示至少一個 provider 正常；1 表示全部 provider 失敗；2 表示 config / secrets 不可用
@@ -101,7 +101,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CORE-01 | Phase 1 | Complete |
 | CORE-02 | Phase 2 | Pending |
-| CORE-03 | Phase 2 | Pending |
+| CORE-03 | Phase 2 | Complete |
 | CORE-04 | Phase 2 | Pending |
 | CORE-05 | Phase 1 | Complete |
 | CORE-06 | Phase 2 | Pending |
