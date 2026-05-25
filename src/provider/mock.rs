@@ -5,6 +5,10 @@ use async_trait::async_trait;
 use crate::model::{HpWindow, ProviderError, ProviderId, ProviderState, ResetInfo};
 use crate::provider::{FetchCtx, Provider};
 
+/// Default per-provider refresh interval (D-72). `Engine::new` (Plan 02) uses
+/// this when `[providers.mock] refresh_interval` is absent from the config.
+pub const DEFAULT_REFRESH_INTERVAL_SECS: u64 = 15;
+
 /// Phase 0 placeholder provider. Returns a hardcoded `HpWindow` per CONTEXT D-25
 /// so the spine can be exercised before any real adapter exists. Phase 1 will
 /// gate this behind a config-only flag; production builds will not invoke

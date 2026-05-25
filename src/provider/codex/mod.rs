@@ -35,6 +35,10 @@ pub mod jsonl;
 pub mod sqlite;
 pub mod window;
 
+/// Default per-provider refresh interval (D-72). `Engine::new` (Plan 02) uses
+/// this when `[providers.codex] refresh_interval` is absent from the config.
+pub const DEFAULT_REFRESH_INTERVAL_SECS: u64 = 15;
+
 /// Codex CLI adapter. `codex_dir` is `home_dir.join(".codex")` (test-injectable
 /// via `new(home_dir)`); secrets are not consumed by Codex in Phase 2 but the
 /// SEC-04 contract is honored via `let _ = ctx.secrets;` in `fetch`.

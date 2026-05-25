@@ -26,6 +26,15 @@ use async_trait::async_trait;
 use crate::model::{ProviderError, ProviderId, ProviderState};
 use crate::provider::{FetchCtx, Provider};
 
+/// Default per-provider refresh interval (D-72). `Engine::new` (Plan 02) uses
+/// this when `[providers.gemini] refresh_interval` is absent from the config.
+///
+/// Note: this value has no practical effect for the Phase 3 stub — the stub
+/// always returns `Err(Unavailable)` and the cache is never populated, so the
+/// interval never triggers a real skip. The constant exists for parity with
+/// the other provider modules so `Engine::new` can look it up uniformly.
+pub const DEFAULT_REFRESH_INTERVAL_SECS: u64 = 15;
+
 /// Phase-3 placeholder: returns `Err(Unavailable)` so the user gets a visible
 /// row + the exit-code grid behaves correctly. Swap this for the real adapter
 /// in Phase 3 (ADP-05); no other wiring changes.

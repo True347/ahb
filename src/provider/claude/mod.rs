@@ -28,6 +28,10 @@ pub mod window;
 
 pub use window::CLAUDE_5H_TOKEN_LIMIT;
 
+/// Default per-provider refresh interval (D-72). `Engine::new` (Plan 02) uses
+/// this when `[providers.claude] refresh_interval` is absent from the config.
+pub const DEFAULT_REFRESH_INTERVAL_SECS: u64 = 15;
+
 /// Claude Code adapter. `base_path` is `home_dir.join(".claude").join("projects")`
 /// (configurable for test injection via `new(home_dir, token_limit)`); `token_limit`
 /// defaults to `CLAUDE_5H_TOKEN_LIMIT` in production wiring.
