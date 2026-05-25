@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: "Completed 03-03 (RowState::StaleOk + build_stale_ok_line + SCAFFOLD removed)"
-last_updated: "2026-05-25T11:49:13.976Z"
+last_updated: "2026-05-25T11:58:43.837Z"
 last_activity: 2026-05-25
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 17
-  completed_plans: 16
-  percent: 60
+  completed_plans: 17
+  percent: 80
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 
 Phase: 03 (gemini-conditional-cache-refresh-policy) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-25
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [█████████░] 94%
 | Phase 03 P02 | 11m | 3 tasks | 8 files |
 | Phase 03 P04 | 2m20s | 2 tasks | 4 files |
 | Phase 03-gemini-conditional-cache-refresh-policy P03 | 18m | 2 tasks | 3 files |
+| Phase Phase 03 P05 P05 | 10m | 2 tasks tasks | 3 files files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 03-03: build_stale_ok_line is SIBLING of build_ok_line not a wrapper (RESEARCH Q6) — ratatui 0.30 per-Span style takes precedence; Color::Yellow applied directly to each styled span
 - [Phase ?]: Plan 03-03 Rule 3 deviation: Task 2 SCAFFOLD removal bundled into Task 1 GREEN commit because cargo build --lib acceptance criterion forced cascade; mirrors Plan 03-02 Task 2 cli/tui cascade bundle
 - [Phase ?]: Plan 03-03: stale suffix is Span::raw (unstyled) not Span::styled(Yellow) per D-69 reading — bar color signals staleness; --color=never paths preserve semantic text for machine consumers regardless of color support
+- [Phase ?]: [Phase 03-05]: Engine::new_with_providers uses #[doc(hidden)] pub fn (not #[cfg(test)] pub fn) because Rust's cfg(test) is per-crate-build — integration tests link the lib without --cfg test. Canonical Rust idiom for cross-crate test seams. Rule 3 deviation documented inline.
+- [Phase ?]: [Phase 03-05]: ScriptedProvider script shape Vec<Result<(), ProviderError>> — Ok(()) means 'succeed with state from ctx.now' so cache fetched_at tracks test's controlled clock; BL-01 invariant preserved end-to-end in 5 integration tests covering D-71 timeline + SC-3 cadence
+- [Phase ?]: [Phase 03-05]: tests/no_walltime_in_adapter.rs scan_dirs widened to include src/engine — Phase 3 cache-write site falls under BL-01 guardrail; pattern: scan list grows phase-by-phase as new wall-clock-sensitive subtrees come online
 
 ### Pending Todos
 
@@ -159,6 +163,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-25T11:49:13.957Z
+Last session: 2026-05-25T11:58:11.516Z
 Stopped at: Completed 03-03 (RowState::StaleOk + build_stale_ok_line + SCAFFOLD removed)
 Resume file: None

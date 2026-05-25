@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 0: Spike & Spine** — Gemini go/no-go memo + `model.rs` contract + scaffold + skeleton binary (completed 2026-05-22)
 - [x] **Phase 1: Engine + Claude + TUI Scaffold** — load-bearing phase: engine, Claude adapter, TUI shell, keyring, panic hook, error isolation (completed 2026-05-23)
 - [x] **Phase 2: Codex + Output Formats** — Codex adapter via spawn_blocking + SQLite, lock `--detailed` / `--json schema_version:1` + exit codes (completed 2026-05-25)
-- [ ] **Phase 3: Gemini (conditional) + Cache & Refresh Policy** — Gemini adapter (full or stub per Phase 0), per-provider refresh, moka stale-on-error
+- [x] **Phase 3: Gemini (conditional) + Cache & Refresh Policy** — Gemini adapter (full or stub per Phase 0), per-provider refresh, moka stale-on-error (completed 2026-05-25)
 - [ ] **Phase 4: Distribution & Release Polish** — cargo-dist + cargo binstall + Gatekeeper docs + crates.io metadata
 
 ## Phase Details
@@ -128,7 +128,7 @@ Plans:
   3. Per-provider `refresh_interval` in `config.toml` overrides the global TUI tick; setting Gemini to 600s while Claude/Codex stay at 15s produces the expected polling cadence (verified by wiremock-based integration tests covering 200 / 304 / 401 / 429+Retry-After / 500 / slow-response paths).
   4. When a network adapter errors transiently, the engine serves the last successful `ProviderState` from cache with a visible "(stale Ns ago)" indicator instead of blanking the row; the cache TTL is decoupled from the refresh interval.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 **Wave 1** *(parallel)*
 
@@ -145,7 +145,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-05-PLAN.md — IntermittentFailureProvider 3-tick integration test + no_walltime_in_adapter engine extension (TUI-03 + ADP-05 verification) [wave 4]
+- [x] 03-05-PLAN.md — IntermittentFailureProvider 3-tick integration test + no_walltime_in_adapter engine extension (TUI-03 + ADP-05 verification) [wave 4]
 
 ### Phase 4: Distribution & Release Polish
 
@@ -172,7 +172,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | 0. Spike & Spine | 5/5 | Complete   | 2026-05-22 |
 | 1. Engine + Claude + TUI Scaffold | 4/4 | Complete   | 2026-05-23 |
 | 2. Codex + Output Formats | 3/3 | Complete   | 2026-05-25 |
-| 3. Gemini (conditional) + Cache & Refresh Policy | 4/5 | In Progress|  |
+| 3. Gemini (conditional) + Cache & Refresh Policy | 5/5 | Complete   | 2026-05-25 |
 | 4. Distribution & Release Polish | 0/TBD | Not started | - |
 
 ---
