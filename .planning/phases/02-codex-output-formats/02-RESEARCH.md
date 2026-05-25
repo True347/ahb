@@ -1369,32 +1369,37 @@ This way, if Codex ships a third window labeled `"weekly"` (as the CONTEXT D-48 
 
 **If this table is more than 0:** A1, A3, A4, A5, A7 should be confirmed before Phase 2 ships. A2, A6, A8 are already-mitigated by code paths.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 2 read the Codex SQLite at all, or just discover the path?**
    - What we know: D-45 says SQLite is for supplemental metadata only; JSONL is primary.
    - What's unclear: Whether the planner wants any actual `SELECT` to happen.
    - Recommendation: **Do not run `SELECT` in Phase 2.** Discover + open + busy_timeout (proves contract). Defer all `threads`-row reads to Phase 3 or v2 unless a concrete UI use case appears.
+   - **RESOLVED (this plan, Task 1+2):** Phase 2 opens `state_*.sqlite` read-only with `busy_timeout=250ms` and runs ZERO `SELECT` queries. Per-thread row reads deferred to Phase 3.
 
 2. **Should the `Claude adapter may be out-of-date` sentinel be generalized to `{Provider} adapter may be out-of-date`?**
    - What we know: UI-SPEC Phase 1 LOCKED the phrase with hardcoded "Claude"; CONTEXT D-Deferred flags this as planner discretion.
    - What's unclear: Whether changing it requires a UI-SPEC update for Phase 1 or just a Phase 2 delta.
    - Recommendation: **Generalize.** Add helper `fn id_label_titlecase(id) -> &'static str` returning `"Claude" | "Codex" | "Gemini" | "Mock"`; update phrase to `format!("{label} adapter may be out-of-date", label = id_label_titlecase(id))`. Update UI-SPEC Phase 1 Dimension 1 with a Phase 2-amends-Phase 1 note.
+   - **RESOLVED (this plan, Task 2):** Sentinel generalized via `id_label_titlecase(id)` in `src/cli/render_text.rs`. UI-SPEC Phase 1 receives a Phase 2 amendment footnote noting Claude rendering is byte-identical.
 
 3. **Should `--json` emit `windows: []` for Mock-when-disabled, or omit Mock entirely?**
    - What we know: D-50 says "mock 預設不 emit 到 production JSON（除非 config enabled）". Engine doesn't register disabled providers.
    - What's unclear: If user explicitly enables Mock + runs `--json`, should Mock appear?
    - Recommendation: **Yes, include Mock in `--json` IF enabled in config.** This is consistent with `--compact` and `--detailed` — the user opted in.
+   - **RESOLVED (Plan 02-03):** Mock IS included in `--json` if-and-only-if the user enables it in config. Engine layer already gates registration on `cfg.providers.mock.enabled`; no additional filter in `to_json_root`. Consistent with `--compact` and `--detailed`.
 
 4. **Should `JsonError.message` for `ProviderError::Internal` strip the anyhow cause chain?**
    - What we know: D-49 + D-Deferred ban cause-chain expansion (path leak risk).
    - What's unclear: Does `format!("{e}")` on `anyhow::Error` already produce only the top-level Display string, or does it walk the chain?
    - Answer (verified via Phase 1 `provider_error_internal_serializes_display` test): `anyhow::Error`'s `Display` impl prints only the top-level message; `Debug` walks the chain. As long as Phase 2's `JsonError.message` uses `format!("{e}")` (Display) and not `format!("{e:?}")` (Debug), the cause chain stays hidden. **Recommend** explicit comment in `error_to_json` fn noting this is a SEC binding.
+   - **RESOLVED (Plan 02-03):** `JsonError.message` uses `e.to_string()` (Display) — verified anyhow Display does NOT walk the cause chain. SEC binding comment lives on `error_to_json` rustdoc in `src/cli/render_json.rs`.
 
 5. **For Claude weekly anchor, should AHB use system timezone or UTC?**
    - What we know: Users likely think of "Monday morning" in their local time, not UTC.
    - What's unclear: Anthropic's actual anchor TZ.
    - Recommendation: **Use system timezone** via `jiff::tz::TimeZone::system()`. README clarifies "weekly window resets at next Monday 00:00 in your local timezone — best-effort estimate; Anthropic's actual reset may differ by hours."
+   - **RESOLVED (Plan 02-02):** System timezone via `jiff::tz::TimeZone::system()`. README clarifies "best-effort; Anthropic's actual reset may differ by hours."
 
 ## Environment Availability
 

@@ -17,6 +17,7 @@ use crate::model::{ProviderError, ProviderId, ProviderState};
 use crate::secrets::Secrets;
 
 pub mod claude;
+pub mod codex;
 pub mod mock;
 
 /// Per-fetch context. Currently the minimal 2 fields recommended by RESEARCH Q5:

@@ -40,6 +40,9 @@ owo-colors = { version = "4", features = ["supports-colors"] }
 # Phase 1 — JSONL file discovery for Claude adapter (REQ ADP-02).
 glob = "0.3"
 
+# Phase 2 — ADP-04 Codex state DB read-only (bundled SQLite = no system dep).
+rusqlite = { version = "0.39", features = ["bundled"] }
+
 # Phase 1 — cross-OS config path resolution (REQ CFG-02; D-39).
 directories = "6"
 

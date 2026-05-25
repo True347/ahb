@@ -6,7 +6,7 @@
 enabled = false  # Claude Code subscription — reads ~/.claude/projects/**/*.jsonl
 
 [providers.codex]
-enabled = false  # Codex CLI subscription — not yet implemented (Phase 2)
+enabled = false  # Codex CLI subscription — reads ~/.codex/sessions/**/rollout-*.jsonl + state_*.sqlite (read-only)
 
 [providers.gemini]
 enabled = false  # Gemini CLI subscription — not yet implemented (Phase 3)
