@@ -1,3 +1,7 @@
 # Rust build artifacts
 /target
 **/*.rs.bk
+
+# Local tooling — never publish to GitHub
+/.claude/
+/.omg/
