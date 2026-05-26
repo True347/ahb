@@ -10,7 +10,7 @@
 
 #![allow(clippy::unwrap_used)] // tests: clippy.toml allow-unwrap-in-tests = true
 
-use ahb::secrets::Secret;
+use ai_hp_bar::secrets::Secret;
 
 const FIXTURE: &str = "deadbeefcafe1234567890abcdef";
 

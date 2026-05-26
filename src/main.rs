@@ -11,10 +11,10 @@
 
 use clap::Parser;
 
-use ahb::cli::{Cli, Command};
-use ahb::config::{self, LoadOutcome};
-use ahb::engine::Engine;
-use ahb::secrets::{self, InitOutcome};
+use ai_hp_bar::cli::{Cli, Command};
+use ai_hp_bar::config::{self, LoadOutcome};
+use ai_hp_bar::engine::Engine;
+use ai_hp_bar::secrets::{self, InitOutcome};
 
 /// Phase 0 panic hook. Composes via `take_hook()` + `set_hook()` so Phase 1's
 /// `ratatui::run` (Plan 03) can wrap it (ratatui takes the hook AFTER we install ours
@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     // (Plan 02 shape when false; JsonRoot-shaped envelope when true).
     #[cfg(debug_assertions)]
     if cli.debug_emit_fake_secret {
-        ahb::cli::debug_emit_fake_secret_and_exit(cli.json);
+        ai_hp_bar::cli::debug_emit_fake_secret_and_exit(cli.json);
     }
 
     let config_path = config::default_path()?;
@@ -99,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
     // 0/1 paths.
     let outcome = match cli.command {
         Some(Command::Tui) => {
-            ahb::tui::run(engine).await?;
+            ai_hp_bar::tui::run(engine).await?;
             // TUI doesn't gate exit code on the provider grid — explicit 0.
             return Ok(());
         }
@@ -108,11 +108,11 @@ async fn main() -> anyhow::Result<()> {
             // (semantically equivalent to no flag — D-57 + CORE-02). The clap
             // ArgGroup guarantees at most one of compact/detailed/json is set.
             if cli.json {
-                ahb::cli::render_json::run_json(&engine, cli.color).await?
+                ai_hp_bar::cli::render_json::run_json(&engine, cli.color).await?
             } else if cli.detailed {
-                ahb::cli::run_detailed(&engine, cli.ascii, cli.color).await?
+                ai_hp_bar::cli::run_detailed(&engine, cli.ascii, cli.color).await?
             } else {
-                ahb::cli::run_compact(&engine, cli.ascii, cli.color).await?
+                ai_hp_bar::cli::run_compact(&engine, cli.ascii, cli.color).await?
             }
         }
     };

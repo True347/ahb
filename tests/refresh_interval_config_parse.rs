@@ -1,7 +1,7 @@
 //! Integration tests for Phase 3 Plan 01 / CFG-03 / D-72: the
 //! `[providers.<id>].refresh_interval` config knob.
 //!
-//! These tests exercise the **public** `ahb::config::load_or_init` path with
+//! These tests exercise the **public** `ai_hp_bar::config::load_or_init` path with
 //! tempfile-backed configs. The clamp-and-warn behavior described in D-72 is
 //! enforced inside `Engine::new` (Plan 02 of this phase); the parser layer is
 //! a pure DTO that accepts any valid `u64`. These tests pin that DTO contract
@@ -11,13 +11,13 @@
 //! Test names follow `03-RESEARCH.md § Test Surface` so `cargo test
 //! refresh_interval_config_parse` filter-matches all five.
 
-use ahb::config::{load_or_init, LoadOutcome};
+use ai_hp_bar::config::{load_or_init, LoadOutcome};
 
 /// Helper: write `body` to a fresh tempfile and call `load_or_init`.
 /// Returns the parsed `Config` (panics if the loader chose `Initialized` — the
 /// path is `tempfile::NamedTempFile::path()` which always exists, so we should
 /// always hit the `Loaded` arm).
-fn parse_config(body: &str) -> ahb::config::Config {
+fn parse_config(body: &str) -> ai_hp_bar::config::Config {
     let tmp = tempfile::NamedTempFile::new().expect("tempfile");
     std::fs::write(tmp.path(), body).expect("write");
     let outcome = load_or_init(tmp.path()).expect("load");

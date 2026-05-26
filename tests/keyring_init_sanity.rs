@@ -11,7 +11,7 @@
 
 #![allow(clippy::unwrap_used, clippy::panic)] // tests: clippy.toml allow-* = true
 
-use ahb::secrets::{self, InitOutcome};
+use ai_hp_bar::secrets::{self, InitOutcome};
 
 #[test]
 fn init_returns_ready_or_unavailable() {

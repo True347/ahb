@@ -17,11 +17,11 @@
 
 use std::io::Write;
 
-use ahb::config::{Config, ProviderConfig, Providers};
-use ahb::engine::Engine;
-use ahb::engine::cache::RowOutcome;
-use ahb::model::ProviderId;
-use ahb::secrets::Secrets;
+use ai_hp_bar::config::{Config, ProviderConfig, Providers};
+use ai_hp_bar::engine::Engine;
+use ai_hp_bar::engine::cache::RowOutcome;
+use ai_hp_bar::model::ProviderId;
+use ai_hp_bar::secrets::Secrets;
 
 /// Hand-built synthetic JSONL envelope — identical shape to the
 /// `tests/cli_walking_skeleton.rs::make_fixture_jsonl` helper. Reusing the format

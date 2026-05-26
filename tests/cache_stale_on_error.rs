@@ -31,12 +31,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use ahb::config::{Config, ProviderConfig, Providers};
-use ahb::engine::Engine;
-use ahb::engine::cache::RowOutcome;
-use ahb::model::{HpWindow, NetworkErr, ProviderError, ProviderId, ProviderState, ResetInfo};
-use ahb::provider::{FetchCtx, Provider};
-use ahb::secrets::Secrets;
+use ai_hp_bar::config::{Config, ProviderConfig, Providers};
+use ai_hp_bar::engine::Engine;
+use ai_hp_bar::engine::cache::RowOutcome;
+use ai_hp_bar::model::{HpWindow, NetworkErr, ProviderError, ProviderId, ProviderState, ResetInfo};
+use ai_hp_bar::provider::{FetchCtx, Provider};
+use ai_hp_bar::secrets::Secrets;
 
 /// Build a synthetic ProviderState whose `fetched_at` matches the injected `now`
 /// (BL-01 — adapter clocks come from ctx.now, never wall-clock).

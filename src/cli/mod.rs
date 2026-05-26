@@ -1,7 +1,7 @@
 //! CLI surface for AHB. Phase 1:
 //! - `Cli` struct + `Command` subcommand enum moved out of `main.rs`.
 //! - `run_compact(engine, ascii, color)` dispatches the default no-subcommand path.
-//! - `Command::Tui` is dispatched by `main.rs` to `ahb::tui::run(engine).await`
+//! - `Command::Tui` is dispatched by `main.rs` to `ai_hp_bar::tui::run(engine).await`
 //!   (Plan 03 wired the real ratatui surface; Plan 04 deleted the obsolete
 //!   Phase 0 TUI stub placeholder, see WR-08).
 

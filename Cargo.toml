@@ -1,7 +1,7 @@
 # Cargo.toml — Phase 0 + Phase 1
 [package]
-name = "ahb"
-version = "0.0.1"
+name = "ai-hp-bar"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -10,6 +10,18 @@ repository = "https://github.com/True347/ahb"
 readme = "README.md"
 keywords = ["claude", "codex", "gemini", "cli", "tui"]
 categories = ["command-line-utilities"]
+exclude = [
+    ".planning/",
+    ".github/",
+    "tests/data/",
+    ".claude/",
+    ".omg/",
+    "CLAUDE.md",
+]
+
+[[bin]]
+name = "ahb"
+path = "src/main.rs"
 
 [dependencies]
 # Phase 0 — CLI parsing.
@@ -128,4 +140,6 @@ regex = "1"
 portable-pty = "0.9"
 
 [profile.release]
-# Phase 4 will tune more. Phase 0 default is fine.
+lto = true
+strip = "symbols"
+opt-level = 3
