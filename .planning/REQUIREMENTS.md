@@ -49,8 +49,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Quality & Distribution
 
-- [ ] **DIST-01**: 編譯成單一靜態 binary，無 runtime / OpenSSL / native-tls 系統依賴（rustls）
-- [ ] **DIST-02**: 可透過 `cargo install`、`cargo binstall`、GitHub release 下載安裝；至少這三條路徑 README 都有文件
+- [x] **DIST-01**: 編譯成單一靜態 binary，無 runtime / OpenSSL / native-tls 系統依賴（rustls）
+- [x] **DIST-02**: 可透過 `cargo install`、`cargo binstall`、GitHub release 下載安裝；至少這三條路徑 README 都有文件
 - [x] **DIST-03**: macOS Gatekeeper 阻擋情境的解法在 README 有文件
 - [x] **DIST-04**: Crate metadata（description / keywords / repository）齊備，crates.io 可被搜到
 
@@ -124,8 +124,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADP-03 | Phase 1 | Complete |
 | ADP-04 | Phase 2 | Complete |
 | ADP-05 | Phase 3 | Pending (conditional on Phase 0 spike) |
-| DIST-01 | Phase 4 | Pending |
-| DIST-02 | Phase 4 | Pending |
+| DIST-01 | Phase 4 | Complete |
+| DIST-02 | Phase 4 | Complete |
 | DIST-03 | Phase 4 | Complete |
 | DIST-04 | Phase 4 | Complete |
 

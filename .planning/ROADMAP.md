@@ -160,7 +160,7 @@ Plans:
   3. `README.md` contains a macOS Gatekeeper workaround section (`xattr -d com.apple.quarantine ./ahb` and equivalents) so users who hit "developer cannot be verified" can recover without giving up.
   4. The crate is published to crates.io with a discoverable `description` (e.g., "AHB — AI HP Bar — multi-CLI subscription session usage at a glance"), `keywords` covering claude/codex/gemini/cli/tui, and `repository` set so `cargo binstall` auto-discovers releases; searching crates.io for "ai hp bar" or "claude codex usage" finds it.
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 **Wave 1**
 
@@ -185,7 +185,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | 1. Engine + Claude + TUI Scaffold | 4/4 | Complete   | 2026-05-23 |
 | 2. Codex + Output Formats | 3/3 | Complete   | 2026-05-25 |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 5/5 | Complete   | 2026-05-25 |
-| 4. Distribution & Release Polish | 1/3 | In Progress|  |
+| 4. Distribution & Release Polish | 2/3 | In Progress|  |
 
 ---
 *Roadmap created: 2026-05-22*

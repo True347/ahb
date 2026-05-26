@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-01-local-prep
-last_updated: "2026-05-26T01:36:50.689Z"
+last_updated: "2026-05-26T01:49:11.492Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 80
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-22)
 ## Current Position
 
 Phase: 04 (distribution-release-polish) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-26
 
-Progress: [█████████░] 90%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Progress: [█████████░] 90%
 | Phase 03-gemini-conditional-cache-refresh-policy P03 | 18m | 2 tasks | 3 files |
 | Phase Phase 03 P05 P05 | 10m | 2 tasks tasks | 3 files files |
 | Phase 04-distribution-release-polish P01-local-prep | 8min | - tasks | - files |
+| Phase 04-distribution-release-polish P02-cargo-dist-init | 7min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,10 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 04-01]: D-75 crate rename to ai-hp-bar forced ahb:: → ai_hp_bar:: migration in 7 src+test files (Rule 1 deviation); binary name 'ahb' preserved via [[bin]] block — assert_cmd::cargo_bin('ahb') test contract unaffected
 - [Phase ?]: [Phase 04-01]: cargo publish --dry-run packages 55 files / 517.2 KiB / 136.6 KiB compressed; D-82 exclude verified zero hits for .planning/.github/.claude/.omg/tests/data/CLAUDE.md; 17 tests/*.rs retained
 - [Phase ?]: [Phase 04-01]: screenshot.png committed as 120 KiB placeholder PNG — flagged in SUMMARY for human replacement before v0.1.0 tag (headless executor cannot capture real terminal output)
+- [Phase ?]: [Phase 04-02]: cargo-dist 0.32 writes to dist-workspace.toml [dist] for single-crate repos; binary is 'dist' not 'cargo-dist' (cargo dist --version → dist --version Rule 3 adaptation)
+- [Phase ?]: [Phase 04-02]: dist init --yes does NOT support --tap/--pr-run-mode/--formula/--publish-jobs flags; workflow is init → manual edit dist-workspace.toml → dist generate to re-emit release.yml
+- [Phase ?]: [Phase 04-02]: added homepage field to Cargo.toml [package] (=repository URL) — Rule 2 auto-add silencing dist init Homebrew formula warning; required for clean Formula/ahb.rb generation in Wave 3
+- [Phase ?]: [Phase 04-02]: DIST-01 verified on Linux — zero libssl/libcrypto/native-tls/security-framework in ldd; allow-list = vdso+dbus+libc family (Phase 1 keyring backend); macOS/Windows verification deferred to release.yml CI runs
 
 ### Pending Todos
 
@@ -167,6 +172,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-26T01:36:50.674Z
+Last session: 2026-05-26T01:48:51.004Z
 Stopped at: Completed 04-01-local-prep
 Resume file: None
