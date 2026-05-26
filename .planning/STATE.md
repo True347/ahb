@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-05-26T01:15:16.174Z"
-last_activity: 2026-05-26 -- Phase 04 planning complete
+stopped_at: Completed 04-01-local-prep
+last_updated: "2026-05-26T01:36:50.689Z"
+last_activity: 2026-05-26
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
   percent: 80
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-22)
 
 **Core value:** 任何時刻、一個指令，立即看到所有訂閱的 AI CLI「現在還剩多少 session 額度、什麼時候 reset」。
-**Current focus:** Phase 03 — gemini-conditional-cache-refresh-policy
+**Current focus:** Phase 04 — distribution-release-polish
 
 ## Current Position
 
-Phase: 03 (gemini-conditional-cache-refresh-policy) — EXECUTING
-Plan: 5 of 5
+Phase: 04 (distribution-release-polish) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-05-26 -- Phase 04 planning complete
+Last activity: 2026-05-26
 
-Progress: [██████████] 100%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [██████████] 100%
 | Phase 03 P04 | 2m20s | 2 tasks | 4 files |
 | Phase 03-gemini-conditional-cache-refresh-policy P03 | 18m | 2 tasks | 3 files |
 | Phase Phase 03 P05 P05 | 10m | 2 tasks tasks | 3 files files |
+| Phase 04-distribution-release-polish P01-local-prep | 8min | - tasks | - files |
 
 ## Accumulated Context
 
@@ -140,6 +141,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 03-05]: Engine::new_with_providers uses #[doc(hidden)] pub fn (not #[cfg(test)] pub fn) because Rust's cfg(test) is per-crate-build — integration tests link the lib without --cfg test. Canonical Rust idiom for cross-crate test seams. Rule 3 deviation documented inline.
 - [Phase ?]: [Phase 03-05]: ScriptedProvider script shape Vec<Result<(), ProviderError>> — Ok(()) means 'succeed with state from ctx.now' so cache fetched_at tracks test's controlled clock; BL-01 invariant preserved end-to-end in 5 integration tests covering D-71 timeline + SC-3 cadence
 - [Phase ?]: [Phase 03-05]: tests/no_walltime_in_adapter.rs scan_dirs widened to include src/engine — Phase 3 cache-write site falls under BL-01 guardrail; pattern: scan list grows phase-by-phase as new wall-clock-sensitive subtrees come online
+- [Phase ?]: [Phase 04-01]: D-75 crate rename to ai-hp-bar forced ahb:: → ai_hp_bar:: migration in 7 src+test files (Rule 1 deviation); binary name 'ahb' preserved via [[bin]] block — assert_cmd::cargo_bin('ahb') test contract unaffected
+- [Phase ?]: [Phase 04-01]: cargo publish --dry-run packages 55 files / 517.2 KiB / 136.6 KiB compressed; D-82 exclude verified zero hits for .planning/.github/.claude/.omg/tests/data/CLAUDE.md; 17 tests/*.rs retained
+- [Phase ?]: [Phase 04-01]: screenshot.png committed as 120 KiB placeholder PNG — flagged in SUMMARY for human replacement before v0.1.0 tag (headless executor cannot capture real terminal output)
 
 ### Pending Todos
 
@@ -163,6 +167,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-26T00:40:13.735Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-distribution-release-polish/04-CONTEXT.md
+Last session: 2026-05-26T01:36:50.674Z
+Stopped at: Completed 04-01-local-prep
+Resume file: None
