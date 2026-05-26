@@ -7,6 +7,7 @@ rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 description = "AHB — AI HP Bar — multi-CLI subscription session usage at a glance"
 repository = "https://github.com/True347/ahb"
+homepage = "https://github.com/True347/ahb"
 readme = "README.md"
 keywords = ["claude", "codex", "gemini", "cli", "tui"]
 categories = ["command-line-utilities"]
@@ -143,3 +144,8 @@ portable-pty = "0.9"
 lto = true
 strip = "symbols"
 opt-level = 3
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
