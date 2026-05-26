@@ -160,7 +160,19 @@ Plans:
   3. `README.md` contains a macOS Gatekeeper workaround section (`xattr -d com.apple.quarantine ./ahb` and equivalents) so users who hit "developer cannot be verified" can recover without giving up.
   4. The crate is published to crates.io with a discoverable `description` (e.g., "AHB — AI HP Bar — multi-CLI subscription session usage at a glance"), `keywords` covering claude/codex/gemini/cli/tui, and `repository` set so `cargo binstall` auto-discovers releases; searching crates.io for "ai hp bar" or "claude codex usage" finds it.
 
-**Plans:** TBD
+**Plans:** 3 plans
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Local reversible prep: Cargo.toml rename to `ai-hp-bar` + version `0.1.0` + `[[bin]] name = "ahb"` + `exclude` (D-82) + `[profile.release]` (D-81) + README rewrite to D-83 11-section structure + Gatekeeper notes (D-84) + screenshot — `cargo publish --dry-run` clean (DIST-03 + DIST-04) [wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-02-PLAN.md — `cargo dist init` (cargo-dist 0.32.0 pinned) → `[workspace.metadata.dist]` + `[profile.dist]` + `.github/workflows/release.yml` + manual `formula = "ahb"` patch (Finding 3); `cargo dist plan` dry-run + `ldd target/release/ahb` DIST-01 linker proof (DIST-01 + DIST-02 pipeline ready) [wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion — irreversible, sequential, has human-verify checkpoints)*
+
+- [ ] 04-03-PLAN.md — `gh repo create True347/ahb` + `True347/homebrew-tap --add-readme` + human-verify checkpoint for HOMEBREW_TAP_TOKEN fine-grained PAT + `git tag v0.1.0` + wait `release.yml` green + `cargo publish` + human-verify 4-channel clean-environment install validation (DIST-02 SC + DIST-04 SC) [wave 3]
 
 ## Progress
 
@@ -173,8 +185,11 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 (with decimal phases 
 | 1. Engine + Claude + TUI Scaffold | 4/4 | Complete   | 2026-05-23 |
 | 2. Codex + Output Formats | 3/3 | Complete   | 2026-05-25 |
 | 3. Gemini (conditional) + Cache & Refresh Policy | 5/5 | Complete   | 2026-05-25 |
-| 4. Distribution & Release Polish | 0/TBD | Not started | - |
+| 4. Distribution & Release Polish | 0/3 | Planned | - |
 
 ---
 *Roadmap created: 2026-05-22*
+*Last updated: 2026-05-26 — Phase 4 plan list finalized (3 plans across 3 waves)*
 *Coverage: 29/29 v1 requirements mapped (no orphans)*
+</content>
+</invoke>
